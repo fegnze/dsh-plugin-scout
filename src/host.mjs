@@ -52,7 +52,7 @@ export async function resolveRuntime(config = {}) {
       const peers = Object.fromEntries(Object.entries(manifest?.peerDependencies ?? {}).filter(([k]) => k === '@deepseek-ai/dsh' || k.startsWith('@deepseek-ai/dsh-')));
       if (!Object.keys(peers).length) return { status: 'none', peers, failed: {} };
       let bad;
-      try { bad = boot.evaluatePluginCompatibility({ name: manifest.name || 'x', version: manifest.version || '0.0.0', peerDependencies: manifest.peerDependencies }, {}, runtime); }
+      try { bad = boot.evaluatePluginCompatibility({ name: manifest.name || 'x', version: manifest.version || '0.0.0', peerDependencies: manifest.peerDependencies ?? {} }, {}, runtime); }
       catch { bad = { peers }; }
       return { status: bad ? 'incompatible' : 'ok', peers, failed: bad?.peers ?? {} };
     };
