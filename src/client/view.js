@@ -29,18 +29,22 @@ export function ago(iso, now = Date.now()) {
   return `${Math.round(s / 86400)} 天前`;
 }
 
+/** 进度：GitHub 与 npm 并行，进度条按两者加权；已发布条数单列，说明列表已经可用。 */
 export function progressText(p) {
   if (!p) return '准备中…';
-  if (p.phase === 'github') return `GitHub ${p.repos.toLocaleString()} / ~${(p.expected ?? 0).toLocaleString()} 仓库`;
-  if (p.phase === 'npm') return `npm ${p.done} / ${p.total}`;
-  return '…';
+  const parts = [];
+  if (p.phase === 'github') parts.push(`GitHub ${(p.repos ?? 0).toLocaleString()} / ~${(p.expected ?? 0).toLocaleString()}`);
+  else parts.push('GitHub 完成');
+  if (p.npm?.total) parts.push(`npm ${p.npm.done.toLocaleString()} / ${p.npm.total.toLocaleString()}`);
+  if (p.published) parts.push(`已可浏览 ${p.published.toLocaleString()}`);
+  return parts.join(' · ');
 }
 
 export function progressRatio(p) {
   if (!p) return 0;
-  if (p.phase === 'github') return p.expected ? Math.min(0.85, (p.repos / p.expected) * 0.85) : 0.05;
-  if (p.phase === 'npm') return 0.85 + (p.total ? (p.done / p.total) * 0.15 : 0);
-  return 0;
+  const gh = p.phase === 'github' ? (p.expected ? Math.min(1, (p.repos ?? 0) / p.expected) : 0.05) : 1;
+  const npm = p.npm?.total ? p.npm.done / p.npm.total : p.phase === 'github' ? 0 : 1;
+  return Math.min(1, gh * 0.7 + npm * 0.3);
 }
 
 /** 官方 inspect 结果的人话版本。 */

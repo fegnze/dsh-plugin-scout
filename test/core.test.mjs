@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { classify, has } from '../src/core/classify.mjs';
 import { compatibility, evaluate, githubSlug, installSpec, markShadows, patchInserts } from '../src/core/verify.mjs';
-import { normalizeNode, slimManifest, windows, crawlRepos, createGithub } from '../src/core/crawl.mjs';
-import { deriveRecords, emptyIndex, facets, factOf, query } from '../src/core/store.mjs';
+import { normalizeNode, slimManifest, windows, crawlRepos, createGithub, poolIter } from '../src/core/crawl.mjs';
+import { createRecordSet, deriveRecords, emptyIndex, facets, factOf, query } from '../src/core/store.mjs';
 
 const RT = '0.2.0-rc.2';
 const NOW = Date.parse('2026-10-14T00:00:00Z');
@@ -166,10 +166,93 @@ test('crawlRepos pages every window once and keys repos by owner/name', async ()
   const page = await fixture('graphql-page.json');
   const calls = [];
   const gh = {
-    count: async () => 30,
+    count: async (q) => (q.includes('created:2008') ? 30 : 0), // 只有最老的播种窗有数据
     async *pages(q) { calls.push(q); yield page.data.search.nodes; },
   };
   const got = await crawlRepos({ gh, since: undefined, now: NOW });
   assert.equal(got.size, 30);
   assert.equal(calls.length, 1);
+});
+
+test('windows come out newest first, so a streaming crawl shows recent repos before old ones', async () => {
+  const created = Array.from({ length: 5000 }, (_, i) => Date.parse('2026-08-01T00:00:00Z') + i * 60_000);
+  const gh = { async count(q) { const [a, b] = q.match(/created:(\S+)\.\.(\S+)/).slice(1).map(Date.parse); return created.filter((t) => t >= a && t <= b).length; } };
+  const starts = [];
+  for await (const w of windows(gh, 'dsh-plugin', 'created', Date.parse('2026-07-01T00:00:00Z'), Date.parse('2026-09-01T00:00:00Z'))) starts.push(Date.parse(w.q.match(/created:(\S+)\.\./)[1]));
+  assert.ok(starts.length > 1);
+  assert.deepEqual(starts, [...starts].sort((a, b) => b - a));
+});
+
+test('crawlRepos streams: the newest window is paged while an older window is still being counted', async () => {
+  const NODES = (tag) => Array.from({ length: 3 }, (_, i) => ({ nameWithOwner: `${tag}/r${i}`, pushedAt: '2026-10-01T00:00:00Z' }));
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const gh = {
+    async count(q) {
+      if (q.includes('2026-10-10T00:00:00Z..2026-10-14T00:00:00Z')) return 10; // 总数
+      if (q.includes('2026-10-10T00:00:00Z..')) { await gate; return 5; } // 最老的播种窗：计数卡住
+      if (q.endsWith('..2026-10-14T00:00:00Z')) return 5; // 最新的播种窗（近 6 小时）
+      return 0;
+    },
+    async *pages(q) { yield NODES(q.includes('2026-10-10T00:00:00Z') ? 'old' : 'new'); },
+  };
+  const batches = [];
+  const done = crawlRepos({ gh, since: Date.parse('2026-10-10T00:00:00Z'), now: Date.parse('2026-10-14T00:00:00Z'), onBatch: (b) => batches.push(b) });
+  for (let i = 0; i < 100 && !batches.length; i++) await new Promise((r) => setTimeout(r, 2));
+  assert.equal(batches.length, 1, 'first batch arrived while the old window was still blocked');
+  assert.ok(batches[0][0].repo.startsWith('new/'), 'newest window first');
+  release();
+  const all = await done;
+  assert.equal(all.size, 6);
+  assert.deepEqual(batches.map((b) => b[0].repo.split('/')[0]), ['new', 'old']);
+});
+
+test('poolIter: bounded concurrency, consumes everything once, propagates errors', async () => {
+  async function* gen(n) { for (let i = 0; i < n; i++) { await new Promise((r) => setTimeout(r, 1)); yield i; } }
+  let live = 0; let peak = 0; const got = [];
+  await poolIter(gen(20), 3, async (x) => { live++; peak = Math.max(peak, live); await new Promise((r) => setTimeout(r, 3)); got.push(x); live--; });
+  assert.equal(peak, 3);
+  assert.deepEqual(got.sort((a, b) => a - b), Array.from({ length: 20 }, (_, i) => i));
+  await assert.rejects(() => poolIter(gen(5), 2, async (x) => { if (x === 2) throw new Error('boom'); }), /boom/);
+});
+
+test('createRecordSet: upsert/remove only touch one key; snapshot equals a full derive', () => {
+  const env = { runtime: '0.2.0-rc.2', now: Date.parse('2026-10-14T00:00:00Z') };
+  const mk = (name, stars) => factOf({ repo: `o/${name}`, description: 'memory', stars, pushedAt: '2026-10-01T00:00:00Z', createdAt: '2026-09-01T00:00:00Z', archived: false, fork: false, license: 'MIT', topics: [], pkg: { name, version: '1.0.0', dsh: { bundle: true } } });
+  const index = { ...emptyIndex(), repos: { 'o/a': mk('a', 1), 'o/b': mk('b', 2) } };
+  const set = createRecordSet(() => env);
+  set.reset(index);
+  assert.deepEqual(set.snapshot().map((r) => r.repo).sort(), deriveRecords(index, env).map((r) => r.repo).sort());
+  set.upsert('o/c', mk('c', 3), {});
+  set.remove('o/a');
+  set.upsert('o/b', { ...mk('b', 2), plugin: false }, {});
+  assert.deepEqual(set.snapshot().map((r) => r.repo), ['o/c']);
+});
+
+test('seedSpans: geometric spans newest-last, contiguous, inside [from, to]', async () => {
+  const { seedSpans } = await import('../src/core/crawl.mjs');
+  const to = Date.parse('2026-10-14T00:00:00Z');
+  const spans = seedSpans(Date.parse('2008-01-01T00:00:00Z'), to);
+  assert.equal(spans.length, 7);
+  assert.equal(spans.at(-1)[1], to);
+  assert.equal(spans.at(-1)[1] - spans.at(-1)[0], 6 * 3_600_000 - 1000);
+  for (let i = 1; i < spans.length; i++) assert.equal(spans[i][0], spans[i - 1][1] + 1000);
+  assert.equal(seedSpans(to - 3_600_000, to).length, 1, 'short ranges are not split');
+});
+
+test('crawlRepos with known facts: unchanged repos skip blob fetch, changed ones fetched by id', async () => {
+  const light = (name, pushedAt) => ({ id: `id-${name}`, nameWithOwner: `o/${name}`, pushedAt, stargazerCount: 7 });
+  const byIdsCalls = [];
+  const gh = {
+    count: async (q) => (q.includes('created:2008') ? 3 : 0),
+    async *pages(q, o) { assert.equal(o.light, true); yield [light('same', '2026-10-01T00:00:00Z'), light('moved', '2026-10-13T00:00:00Z'), light('new', '2026-10-13T00:00:00Z')]; },
+    async byIds(ids) { byIdsCalls.push(ids); return ids.map((id) => ({ nameWithOwner: `o/${id.slice(3)}`, pushedAt: '2026-10-13T00:00:00Z' })); },
+  };
+  const knownFacts = { 'o/same': { repo: 'o/same', pushedAt: '2026-10-01T00:00:00Z', stars: 1, pkg: { name: 'same' } }, 'o/moved': { repo: 'o/moved', pushedAt: '2026-09-01T00:00:00Z', pkg: { name: 'moved' } } };
+  const progress = [];
+  const got = await crawlRepos({ gh, now: NOW, known: (k) => knownFacts[k], onProgress: (p) => progress.push(p) });
+  assert.deepEqual(byIdsCalls, [['id-moved', 'id-new']]);
+  assert.equal(got.get('o/same').stars, 7, 'metadata refreshed from the light page');
+  assert.deepEqual(got.get('o/same').pkg, { name: 'same' }, 'facts kept without refetching package.json');
+  assert.deepEqual([progress.at(-1).changed, progress.at(-1).unchanged], [2, 1]);
 });

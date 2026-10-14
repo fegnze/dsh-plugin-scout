@@ -11,7 +11,7 @@ const T0 = Date.parse('2026-10-14T00:00:00Z');
 
 const pkg = (name, extra = {}) => JSON.stringify({ name, version: '1.0.0', description: 'session memory', peerDependencies: { '@deepseek-ai/dsh': '^0.2.0-rc.1' }, dsh: { bundle: {} }, repository: `github:o/${name}`, ...extra });
 const node = (owner, name, pkgText, extra = {}) => ({
-  nameWithOwner: `${owner}/${name}`, description: 'd', stargazerCount: 3, pushedAt: '2026-10-01T00:00:00Z', createdAt: '2026-09-01T00:00:00Z',
+  id: `id:${owner}/${name}`, nameWithOwner: `${owner}/${name}`, description: 'd', stargazerCount: 3, pushedAt: '2026-10-01T00:00:00Z', createdAt: '2026-09-01T00:00:00Z',
   isArchived: false, isFork: false, licenseInfo: { spdxId: 'MIT' }, repositoryTopics: { nodes: [{ topic: { name: 'dsh-plugin' } }] },
   pkg: pkgText == null ? null : { text: pkgText }, patch: null, ...extra,
 });
@@ -173,5 +173,101 @@ test('apply: registers one prefix route through ctx.effect and tears it down', a
     assert.equal(s.body.value.runtimeSource, 'config');
     await teardown();
     assert.equal(routes.length, 0);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+/** 可控的 GitHub：按查询里的时间窗决定计数与节点；`hold(q)` 返回的 promise 未决前该窗的翻页挂起。 */
+function windowFetch({ total, windowsOf, hold = () => undefined, npm = {} }) {
+  const calls = { npm: [], byIds: [] };
+  const byId = new Map();
+  const reply = (status, body) => ({ status, ok: status < 300, headers: new Headers(), json: async () => body });
+  const fetch = async (url, init) => {
+    if (String(url).includes('registry.npmjs.org')) {
+      const name = decodeURIComponent(String(url).split('registry.npmjs.org/')[1].replace(/\/latest$/, ''));
+      calls.npm.push(name);
+      return npm[name] ? reply(200, npm[name]) : reply(404, {});
+    }
+    const { query, variables } = JSON.parse(init.body);
+    if (variables.ids) { calls.byIds.push(variables.ids); return reply(200, { data: { nodes: variables.ids.map((id) => byId.get(id)) } }); }
+    const nodes = windowsOf(variables.q);
+    for (const n of nodes) byId.set(n.id, n);
+    if (!/nodes\{/.test(query)) return reply(200, { data: { search: { repositoryCount: nodes.length || total } } });
+    await hold(variables.q);
+    return reply(200, { data: { search: { repositoryCount: nodes.length, nodes, pageInfo: { hasNextPage: false, endCursor: null } } } });
+  };
+  return { fetch, calls };
+}
+
+test('refresh streams: results are published while GitHub is still paging, old index stays served', async () => {
+  const dir = await tmp();
+  try {
+    const file = join(dir, 'index.json');
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    // 首窗（新）立即返回；另一窗（旧）卡住。总数 1000 迫使二分出两个窗。
+    const { fetch } = windowFetch({
+      total: 1000,
+      // 总数窗（2008..现在）只给计数；最老的播种窗出 old（翻页卡住）；最新的播种窗出 fresh；中间窗为空。
+      windowsOf: (q) => (/created:2008/.test(q) ? (/\.\.2026-10-14/.test(q) ? [] : [node('o', 'old', pkg('old'))]) : /\.\.2026-10-14T00:00:00Z$/.test(q) ? [node('o', 'fresh', pkg('fresh'))] : []),
+      hold: (q) => (/created:2008/.test(q) ? gate : undefined),
+    });
+    const scout = createScout({ file, runtime: RT, fetch, now: () => T0, publishMs: 0, getToken: async () => ({ token: 't'.repeat(30) }) });
+    scout._set({ version: 1, npm: {}, repos: { 'o/stale': factOfLike('stale') } });
+    const rev0 = scout.status().rev;
+    scout.refresh('full');
+    const t = setTimeout(() => release(), 3000);
+    for (let i = 0; i < 200 && !scout.records.some((r) => r.name === 'fresh'); i++) await new Promise((r) => setTimeout(r, 5));
+    assert.ok(scout.status().running, 'still crawling');
+    assert.ok(scout.status().rev > rev0, 'published mid-flight');
+    assert.deepEqual(scout.records.map((r) => r.name).sort(), ['fresh', 'stale'], 'old index still served during a refresh');
+    assert.ok(scout.status().progress.published >= 1 || scout.status().progress.phase === 'github');
+    release();
+    clearTimeout(t);
+    await settle(scout);
+    assert.equal(scout.status().error, null);
+    assert.deepEqual(scout.records.map((r) => r.name).sort(), ['fresh', 'old'], 'full refresh prunes repos it no longer sees');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+function factOfLike(name) {
+  return { repo: `o/${name}`, description: 'memory', stars: 1, pushedAt: '2026-10-01T00:00:00Z', createdAt: '2026-09-01T00:00:00Z', archived: false, fork: false, license: 'MIT', topics: ['dsh-plugin'], pkg: JSON.parse(pkg(name)) };
+}
+
+test('incremental refresh keeps unseen repos and caps stale npm re-checks oldest first', async () => {
+  const dir = await tmp();
+  try {
+    const file = join(dir, 'index.json');
+    const { fetch, calls } = windowFetch({ total: 0, windowsOf: () => [] });
+    const old = (d) => ({ at: T0 - d * 86_400_000, m: null });
+    const scout = createScout({ file, runtime: RT, fetch, now: () => T0, staleBatch: 2, getToken: async () => ({ token: 't'.repeat(30) }) });
+    scout._set({ version: 1, crawledAt: '2026-10-13T00:00:00Z', fullAt: '2026-10-01T00:00:00Z',
+      npm: { a: old(30), b: old(9), c: old(20), d: old(1) },
+      repos: { 'o/a': factOfLike('a'), 'o/b': factOfLike('b'), 'o/c': factOfLike('c'), 'o/d': factOfLike('d'), 'o/e': factOfLike('e') } });
+    scout.refresh();
+    await settle(scout);
+    assert.equal(scout.status().kind, 'incremental');
+    assert.equal(scout.status().error, null);
+    // 过期（>7 天）的 a/c/b 只补最旧的 2 个；从没查过的 e 另算一份配额；d 未过期不查。
+    assert.deepEqual(calls.npm.sort(), ['a', 'c', 'e']);
+    assert.equal(scout.records.length, 5, 'incremental never prunes');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('apply does not wait for the index: status answers loaded:false first, then loaded:true', async () => {
+  const dir = await tmp();
+  try {
+    const routes = [];
+    const ctx = {
+      webServer: { register(r) { routes.push(r); return () => {}; } },
+      subprocess: { spawn() { throw new Error('not in test'); } },
+      effect(fn) { fn(); },
+      get: () => ({ admit: () => ({ peer: {} }) }),
+      logger: { info() {}, warn() {} },
+    };
+    await apply(ctx, { dataDir: dir, runtimeVersion: '0.2.0-rc.2', autoRefreshHours: 0 });
+    const first = await call(routes[0].handler, { url: `${PREFIX}/api/status` });
+    assert.equal(typeof first.body.value.loaded, 'boolean');
+    for (let i = 0; i < 100; i++) { if ((await call(routes[0].handler, { url: `${PREFIX}/api/status` })).body.value.loaded) break; await new Promise((r) => setTimeout(r, 5)); }
+    assert.equal((await call(routes[0].handler, { url: `${PREFIX}/api/status` })).body.value.loaded, true);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

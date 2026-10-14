@@ -38,12 +38,13 @@ export function ScoutPage({ face }) {
     take();
     return face.onPending?.(take);
   }, [face]);
-  // 刷新进行中轮询状态；结束后重拉列表。
+  // 索引后台加载中或刷新进行中轮询状态；status.rev 每次发布都会变，列表随之重拉（边抓边看）。
+  const busy = !!status && (status.running || !status.loaded);
   useEffect(() => {
-    if (!status?.running) return undefined;
+    if (!busy) return undefined;
     const h = setInterval(loadStatus, 1500);
     return () => clearInterval(h);
-  }, [status?.running, loadStatus]);
+  }, [busy, loadStatus]);
 
   const installedKey = installed.join('\n');
   useEffect(() => {
@@ -55,7 +56,7 @@ export function ScoutPage({ face }) {
       } catch (e) { if (id === seq.current) setError(e.message); }
     }, q ? 180 : 0);
     return () => clearTimeout(h);
-  }, [q, cat, sort, compat.join(), flags.join(), inst, installedKey, limit, status?.crawledAt]);
+  }, [q, cat, sort, compat.join(), flags.join(), inst, installedKey, limit, status?.rev]);
 
   const toggle = (list, set, v) => { set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]); setLimit(PAGE); };
   const labels = status?.categories ?? {};
@@ -66,7 +67,7 @@ export function ScoutPage({ face }) {
     try { setStatus(await api.refresh(full)); } catch (e) { say(e.message); void loadStatus(); }
   };
 
-  const empty = status && !status.crawledAt && !status.running;
+  const empty = status && status.loaded && !status.crawledAt && !status.running && !status.repos;
   return (
     <div className="scx-root scx-page" data-scout-page="">
       <div className="scx-top">
@@ -78,7 +79,7 @@ export function ScoutPage({ face }) {
         </div>
         <div className="scx-fresh">
           <span title={status?.runtimeSource}>运行时 {status?.runtime ?? '…'}</span>
-          <span>{status?.running ? progressText(status.progress) : `更新于 ${ago(status?.crawledAt)}`}</span>
+          <span>{status?.running ? progressText(status.progress) : status && !status.loaded ? '读取索引…' : `更新于 ${ago(status?.crawledAt)}`}</span>
           <button type="button" className="scx-btn" disabled={!status || status.running} onClick={() => refresh(false)}>{status?.running ? '刷新中…' : '刷新'}</button>
         </div>
       </div>
@@ -112,7 +113,7 @@ export function ScoutPage({ face }) {
         <div className="scx-list">
           {error ? <div className="scx-note" data-tone="bad">{error}</div> : null}
           {status?.error ? <div className="scx-note" data-tone="bad">上次刷新失败：{status.error.message}</div> : null}
-          {empty ? <div className="scx-note">还没有索引。首次全量抓取约 2 万个仓库，耗时数分钟，期间可正常使用 DSH。<button type="button" className="scx-btn" style={{ marginLeft: 8 }} onClick={() => refresh(true)}>开始抓取</button></div> : null}
+          {empty ? <div className="scx-note">还没有索引。抓取边进行边出结果——最近活跃的插件几秒内就会出现，其余在后台补齐，期间可正常使用 DSH。<button type="button" className="scx-btn" style={{ marginLeft: 8 }} onClick={() => refresh(true)}>开始抓取</button></div> : null}
           <div className="scx-cats" role="tablist" aria-label="用途分类">
             {['all', ...Object.keys(labels), 'other'].filter((id) => id !== 'other' || (data?.cats.other ?? 0) > 0 || cat === 'other').map((id) => (
               <button key={id} type="button" role="tab" className="scx-cat" aria-selected={cat === id} onClick={() => { setCat(id); setLimit(PAGE); }}>
@@ -121,7 +122,7 @@ export function ScoutPage({ face }) {
             ))}
           </div>
           <div className="scx-lhead">
-            <span>{data ? `${data.total.toLocaleString()} 个插件` : '加载中…'}</span>
+            <span>{data ? `${data.total.toLocaleString()} 个插件${status?.running ? '（抓取中，持续增加）' : ''}` : '加载中…'}</span>
             <span style={{ marginLeft: 'auto' }}>排序</span>
             <select aria-label="排序" value={sort} onChange={(e) => setSort(e.target.value)}>
               <option value="score">可信度</option><option value="stars">star</option><option value="recent">最近推送</option><option value="name">名称</option>

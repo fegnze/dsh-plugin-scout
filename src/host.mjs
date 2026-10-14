@@ -4,8 +4,8 @@
 import { homedir } from 'node:os';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { crawlRepos, createGithub, npmLatest, pool } from './core/crawl.mjs';
-import { deriveRecords, emptyIndex, facets, factOf, loadIndex, query, saveIndex } from './core/store.mjs';
+import { crawlRepos, createGithub, npmLatest } from './core/crawl.mjs';
+import { createRecordSet, emptyIndex, facets, factOf, loadIndex, query, saveIndex } from './core/store.mjs';
 import { CATEGORIES } from './core/classify.mjs';
 import { installSpec } from './core/verify.mjs';
 
@@ -16,6 +16,13 @@ export const PREFIX = '/dsh-plugin-scout';
 const DAY = 86_400_000;
 const NPM_TTL = DAY;
 const AUTO_DELAY = 45_000;
+/** 刷新期间每隔多久把新到的结果发布给界面。 */
+const PUBLISH_MS = 1_500;
+/** 刷新期间每隔多久把已抓到的事实落盘（断点）。 */
+const CHECKPOINT_MS = 30_000;
+const NPM_CONCURRENCY = 8;
+/** 每轮最多补查多少个过期的 npm 清单。 */
+const NPM_STALE_BATCH = 800;
 
 export const Config = {
   '~standard': {
@@ -88,61 +95,159 @@ export async function resolveToken(subprocess) {
 }
 
 /** 抓取与索引的状态机。单实例：同一时刻只有一次刷新。 */
-export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fetch = globalThis.fetch, now = () => Date.now(), log = () => {} }) {
+export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fetch = globalThis.fetch, now = () => Date.now(), log = () => {}, publishMs = PUBLISH_MS, checkpointMs = CHECKPOINT_MS, staleBatch = NPM_STALE_BATCH }) {
   let index = emptyIndex();
   let records = [];
   let byName = new Map();
   let byRepo = new Map();
+  let rev = 0;
   let job;
-  const state = { running: false, kind: null, progress: null, error: null, startedAt: null, cost: null };
+  let loading;
+  const set = createRecordSet(() => ({ runtime: runtime.runtime, compat: runtime.compat, now: now() }));
+  const state = { running: false, kind: null, progress: null, error: null, startedAt: null, cost: null, loaded: false };
 
-  const rebuild = () => {
-    records = deriveRecords(index, { runtime: runtime.runtime, compat: runtime.compat, now: now() });
+  /** 把记录集的当前快照发布给接口；只做同名归并，不整库重算。 */
+  const publish = () => {
+    records = set.snapshot();
     byRepo = new Map(records.map((r) => [r.repo.toLowerCase(), r]));
     byName = new Map();
     for (const r of records) if (!r.shadowOf) byName.set(r.name, r);
+    rev++;
   };
+  const rebuild = () => { set.reset(index); publish(); };
 
-  async function load() {
-    index = await loadIndex(file);
-    rebuild();
+  function load() {
+    loading ??= loadIndex(file).then((i) => { index = i; rebuild(); state.loaded = true; }, (e) => { state.loaded = true; throw e; });
+    return loading;
   }
 
   async function run(kind, signal) {
+    await load().catch(() => {});
     const { token, source } = await getToken();
     if (!token) throw Object.assign(new Error('没有 GitHub token：请先在终端执行 `gh auth login`，或设置 GITHUB_TOKEN'), { code: 'no-token' });
     const gh = createGithub({ token, fetch, signal, onCost: (c) => { state.cost = c; } });
     const t0 = now();
     // 增量：自上次抓取前 1 天起推送过的仓库（推送会刷新 package.json，所以 pushed 比 created 更合适）。
     const since = kind === 'incremental' && index.crawledAt ? Date.parse(index.crawledAt) - DAY : undefined;
-    const repos = await crawlRepos({ gh, topic, since, now: t0, signal, onProgress: (p) => { state.progress = { ...p, tokenSource: source }; } });
-    const next = kind === 'full' ? { ...emptyIndex(), npm: index.npm } : { ...index, repos: { ...index.repos } };
-    for (const [key, r] of repos) next.repos[key] = factOf(r);
-    // npm：本轮触及的插件名，加上缓存过期的名字。
-    const touched = new Set();
-    for (const r of repos.values()) if (r.pkg?.name && r.pkg.dsh) touched.add(r.pkg.name);
-    for (const f of Object.values(next.repos)) if (f.pkg?.name && (!next.npm[f.pkg.name] || t0 - next.npm[f.pkg.name].at > NPM_TTL * 7)) touched.add(f.pkg.name);
-    const names = [...touched];
-    let npmDone = 0;
-    state.progress = { phase: 'npm', done: 0, total: names.length };
-    await pool(names, 8, async (n) => {
-      const m = await npmLatest(n, { fetch, signal });
-      if (m !== undefined) next.npm[n] = { at: t0, m };
-      state.progress = { phase: 'npm', done: ++npmDone, total: names.length };
-    }, signal);
+    // 原地合并：刷新期间旧索引始终可用，新到的仓库逐批覆盖进去；全量重建到结尾才剔除本轮没见到的仓库。
+    const next = { ...index, repos: { ...index.repos }, npm: { ...index.npm } };
+    const seen = new Set();
+    const keysByName = new Map();
+    const indexName = (key, fact) => {
+      const n = fact?.pkg?.name;
+      if (!n) return;
+      if (!keysByName.has(n)) keysByName.set(n, new Set());
+      keysByName.get(n).add(key);
+    };
+    for (const [key, fact] of Object.entries(next.repos)) indexName(key, fact);
+
+    // npm 与 GitHub 并行：仓库一到就排队查 npm，不等 GitHub 翻完。
+    const queue = [];
+    const queued = new Set();
+    const npmState = { done: 0, total: 0 };
+    const enqueue = (n) => { if (!queued.has(n)) { queued.add(n); queue.push(n); npmState.total++; } };
+    let githubDone = false;
+    let dirty = false;
+    const waiters = new Set();
+    const wake = () => { for (const r of waiters) r(); waiters.clear(); };
+    const npmWorkers = Array.from({ length: NPM_CONCURRENCY }, async () => {
+      for (;;) {
+        signal.throwIfAborted();
+        const n = queue.shift();
+        if (n === undefined) {
+          if (githubDone) return;
+          await new Promise((r) => { waiters.add(r); setTimeout(r, 200); });
+          continue;
+        }
+        const m = await npmLatest(n, { fetch, signal });
+        if (m !== undefined) { next.npm[n] = { at: t0, m }; set.upsertName(n, next.repos, next.npm, keysByName); dirty = true; }
+        npmState.done++;
+      }
+    });
+    // 先挂上接收者：GitHub 一侧失败/中止时 worker 也会抛，不能变成未处理的 rejection（会带崩宿主进程）。
+    const npmDone = Promise.all(npmWorkers);
+    npmDone.catch(() => {});
+
+    let lastPublish = now();
+    let lastCheckpoint = now();
+    const tick = async (force = false) => {
+      const t = now();
+      if (dirty && (force || t - lastPublish >= publishMs)) { publish(); dirty = false; lastPublish = t; }
+      if (force || t - lastCheckpoint >= checkpointMs) {
+        lastCheckpoint = t;
+        // 断点：事实先落盘（crawledAt 不动），中途退出也不丢已抓到的部分，下次增量从旧水位接着补。
+        await saveIndex(file, next).catch((e) => log(`[scout] checkpoint failed: ${e.message}`));
+      }
+    };
+    const report = (p) => { state.progress = { ...p, npm: { ...npmState }, tokenSource: source, published: records.length }; };
+
+    // 已有索引时只给变动过的仓库补 package.json；冷启动没有可比对的，直接整页带 blob。
+    const known = Object.keys(index.repos).length ? (key) => index.repos[key] : undefined;
+    let crawled;
+    try {
+      crawled = await crawlRepos({
+        gh, topic, since, now: t0, signal, known,
+        onProgress: report,
+        onBatch: (batch) => {
+          for (const r of batch) {
+            const key = r.repo.toLowerCase();
+            const fact = factOf(r);
+            const prev = next.repos[key];
+            seen.add(key);
+            next.repos[key] = fact;
+            indexName(key, fact);
+            set.upsert(key, fact, next.npm);
+            // 仓库有新推送才立即重查 npm（可能刚发了版）；没变的只在 npm 条目过期时查。
+            const n = fact.plugin !== false ? fact.pkg?.name : undefined;
+            if (n && (prev?.pushedAt !== fact.pushedAt || !next.npm[n] || t0 - next.npm[n].at > NPM_TTL)) enqueue(n);
+          }
+          dirty = true;
+          wake();
+          void tick();
+        },
+      });
+    } catch (e) {
+      queue.length = 0;
+      throw e;
+    } finally {
+      githubDone = true;
+      wake();
+    }
+    // npm 过期项按最旧优先、每轮限量补，避免某一天集中过期造成一次上万请求。
+    const stale = Object.entries(next.npm).filter(([n, e]) => !queued.has(n) && t0 - e.at > NPM_TTL * 7).sort((a, b) => a[1].at - b[1].at).slice(0, staleBatch).map(([n]) => n);
+    // 从没查到过 npm 的名字（上轮失败或新出现）也补，同样限量。
+    let missing = 0;
+    for (const f of Object.values(next.repos)) {
+      if (missing >= staleBatch) break;
+      const n = f.plugin !== false ? f.pkg?.name : undefined;
+      if (n && !next.npm[n] && !queued.has(n) && !stale.includes(n)) { stale.push(n); missing++; }
+    }
+    for (const n of stale) enqueue(n);
+    const progressLoop = setInterval(() => { report({ ...state.progress, phase: 'npm', repos: crawled.size, expected: crawled.size }); void tick(); }, 500);
+    try { await npmDone; } finally { clearInterval(progressLoop); }
+
+    if (kind === 'full') {
+      for (const key of Object.keys(next.repos)) if (!seen.has(key)) { delete next.repos[key]; set.remove(key); dirty = true; }
+    }
     next.crawledAt = new Date(t0).toISOString();
     if (kind === 'full') next.fullAt = next.crawledAt;
-    await saveIndex(file, next);
     index = next;
-    rebuild();
-    log(`[scout] ${kind} refresh: ${repos.size} repos, ${names.length} npm lookups, ${records.length} plugins`);
+    dirty = true;
+    await tick(true);
+    log(`[scout] ${kind} refresh: ${crawled.size} repos (${state.progress?.changed ?? '-'} changed, ${state.progress?.unchanged ?? '-'} unchanged), ${npmState.total} npm lookups, ${records.length} plugins`);
   }
 
-  function refresh(kind = index.fullAt ? 'incremental' : 'full') {
+  function refresh(kind) {
     if (state.running) return false;
     const controller = new AbortController();
-    Object.assign(state, { running: true, kind, progress: null, error: null, startedAt: new Date(now()).toISOString() });
-    job = { controller, promise: run(kind, controller.signal).catch((e) => { state.error = { code: e.code ?? 'error', message: e.message }; log(`[scout] refresh failed: ${e.message}`); }).finally(() => { state.running = false; state.progress = null; job = undefined; }) };
+    Object.assign(state, { running: true, kind: kind ?? null, progress: null, error: null, startedAt: new Date(now()).toISOString() });
+    const go = async () => {
+      await load().catch(() => {});
+      const k = kind ?? (index.fullAt ? 'incremental' : 'full');
+      state.kind = k;
+      await run(k, controller.signal);
+    };
+    job = { controller, promise: go().catch((e) => { state.error = { code: e.code ?? 'error', message: e.message }; log(`[scout] refresh failed: ${e.message}`); }).finally(() => { state.running = false; state.progress = null; job = undefined; }) };
     return true;
   }
 
@@ -153,7 +258,7 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
     get index() { return index; },
     get records() { return records; },
     status() {
-      return { ...state, crawledAt: index.crawledAt, fullAt: index.fullAt, runtime: runtime.runtime, runtimeSource: runtime.source, repos: Object.keys(index.repos).length, facets: facets(records), categories: Object.fromEntries(Object.entries(CATEGORIES).map(([k, v]) => [k, v.label])) };
+      return { ...state, rev, crawledAt: index.crawledAt, fullAt: index.fullAt, runtime: runtime.runtime, runtimeSource: runtime.source, repos: Object.keys(index.repos).length, facets: facets(records), categories: Object.fromEntries(Object.entries(CATEGORIES).map(([k, v]) => [k, v.label])) };
     },
     list: (params) => query(records, params),
     detail(key) {
@@ -172,7 +277,7 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
       return out;
     },
     /** 测试用：直接注入索引。 */
-    _set(next) { index = next; rebuild(); },
+    _set(next) { index = next; rebuild(); state.loaded = true; loading = Promise.resolve(); },
   };
 }
 
@@ -234,7 +339,8 @@ export async function apply(ctx, config = {}) {
   const runtime = await resolveRuntime(config);
   const log = (m) => ctx.logger?.info?.(m) ?? ctx.logger?.warn?.(m);
   const scout = createScout({ file: join(dataDir, 'index.json'), topic: config.topic, runtime, getToken: () => resolveToken(ctx.subprocess), log });
-  try { await scout.load(); } catch (e) { ctx.logger?.warn?.(`[scout] index unreadable, starting empty: ${e.message}`); }
+  // 不在激活路径上读 30MB 索引：后台加载，界面先拿到 loaded:false 再自行轮询。
+  scout.load().catch((e) => ctx.logger?.warn?.(`[scout] index unreadable, starting empty: ${e.message}`));
   const admit = (req) => {
     const connection = ctx.get?.('connection');
     return typeof connection?.admit === 'function' ? connection.admit(req) : undefined;

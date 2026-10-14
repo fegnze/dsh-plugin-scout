@@ -48,6 +48,38 @@ export function deriveRecords(index, env) {
   return markShadows(out);
 }
 
+/**
+ * 增量记录集：按仓库缓存判定结果，只重算变动的那几条。
+ * 刷新时每到一批仓库就 upsert，snapshot() 只做一次 O(n) 的同名归并，不再整库重算。
+ */
+export function createRecordSet(env) {
+  const byKey = new Map();
+  const evalOne = (fact, npmIndex) => {
+    if (!fact || fact.plugin === false || !fact.pkg) return undefined;
+    try { return evaluate(fact, npmIndex[fact.pkg.name]?.m, env()); } catch { return undefined; }
+  };
+  return {
+    upsert(key, fact, npmIndex) {
+      const r = evalOne(fact, npmIndex);
+      if (r) byKey.set(key, r); else byKey.delete(key);
+    },
+    remove(key) { byKey.delete(key); },
+    /** 某个 npm 名字更新后，重算用这个名字的仓库。 */
+    upsertName(name, repos, npmIndex, keysByName) {
+      for (const key of keysByName.get(name) ?? []) this.upsert(key, repos[key], npmIndex);
+    },
+    reset(index) {
+      byKey.clear();
+      for (const [key, fact] of Object.entries(index.repos)) this.upsert(key, fact, index.npm);
+    },
+    snapshot() {
+      const list = [...byKey.values()].map((r) => ({ ...r }));
+      return markShadows(list);
+    },
+    get size() { return byKey.size; },
+  };
+}
+
 const SLIM = ['name', 'repo', 'description', 'repoVersion', 'npmVersion', 'stars', 'pushedAt', 'kinds', 'compat', 'hooks', 'chain', 'provenance', 'archived', 'score', 'scoreParts', 'risky', 'copies', 'shadowOf'];
 export function slimRow(r) {
   const row = Object.fromEntries(SLIM.map((k) => [k, r[k]]));
