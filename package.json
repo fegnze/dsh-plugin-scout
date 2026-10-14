@@ -1,0 +1,41 @@
+{
+  "name": "dsh-plugin-scout",
+  "version": "0.1.0",
+  "private": true,
+  "description": "发现与核验 GitHub topic:dsh-plugin 上的 DSH 插件：用途分类、可信度、官方 peer 兼容规则；只核验，不安装",
+  "type": "module",
+  "main": "./lib/host.js",
+  "exports": {
+    ".": "./lib/host.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib", "cordis.patch.yml", "README.md"],
+  "keywords": ["dsh-plugin", "deepseek-harness", "plugin-discovery"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "files": ["cordis.patch.yml"],
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ]
+    }
+  },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "pretest": "npm run build",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "happy-dom": "^20.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "semver": "^7.7.3"
+  }
+}

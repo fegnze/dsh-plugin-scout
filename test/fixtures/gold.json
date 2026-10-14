@@ -1,0 +1,1487 @@
+[
+{
+"name": "dsh-vibe-math",
+"description": "Vibe Mathematics —— 多代理数学问题求解与形式化验证框架",
+"topics": [
+"agent-preset",
+"ai-agents",
+"deepseek-harness",
+"dsh-plugin",
+"llm",
+"math",
+"multi-agent",
+"theorem-proving"
+],
+"keywords": [
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"agent-preset",
+"multi-agent",
+"mathematics",
+"math",
+"theorem-proving",
+"verification",
+"solver",
+"llm-agents"
+],
+"dshDeps": [
+"@deepseek-ai/dsh-base"
+],
+"clientInject": [],
+"gold": "domain"
+},
+{
+"name": "dsh-leekbox",
+"description": "韭菜盒子 LeekBox — A股看盘助手 · DeepSeek Harness (DSH) web 插件",
+"topics": [
+"a-share",
+"dsh",
+"dsh-plugin",
+"finance",
+"stock"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"stock",
+"a-share",
+"finance",
+"kline",
+"watchlist"
+],
+"dshDeps": [],
+"clientInject": [],
+"gold": "domain"
+},
+{
+"name": "@mhxy13867806343/dsh-update-vd",
+"description": "dsh-update-vd",
+"topics": [
+"dsh-plugin"
+],
+"keywords": [
+"dsh",
+"deepseek-harness",
+"cordis",
+"cordis-plugin",
+"desktop",
+"update",
+"updater",
+"agent-preset",
+"conversation-import",
+"macos"
+],
+"dshDeps": [],
+"clientInject": [],
+"gold": "other"
+},
+{
+"name": "dsh-deepseek-style-theme",
+"description": "DeepSeek official-home style theme for the dsh web GUI: fluid particle",
+"topics": [
+"dsh-plugin"
+],
+"keywords": [
+"deepseek",
+"harness",
+"dsh",
+"dsh-plugin",
+"theme",
+"skin",
+"liquid-glass"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-ui-theme",
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-connection"
+],
+"gold": "ui"
+},
+{
+"name": "@guojinpeng/dsh-cost-meter",
+"description": "极简匹配DSH官方风格的计费卡片",
+"topics": [
+"dsh-plugin"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"cordis",
+"cost",
+"token-meter"
+],
+"dshDeps": [
+"@deepseek-ai/dsh-client-connection",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-session-projection",
+"@deepseek-ai/dsh-session-query",
+"@deepseek-ai/dsh-token-meter"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-conversation",
+"@deepseek-ai/dsh-client-ui-chat"
+],
+"gold": "model"
+},
+{
+"name": "memory-eternal",
+"description": "DeepSeek Harness 插件：对话自动沉淀为知识卡，配可检索知识库 + 知识图谱 + 审核中心；SQLite/纯 Markdown",
+"topics": [
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"knowledge-graph",
+"knowledge-graphs",
+"markdown-vault",
+"memory",
+"second-brain",
+"claude-plugin",
+"codex-plugin",
+"plugin",
+"ai-memory",
+"knowledge-base",
+"sqlite"
+],
+"keywords": [
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"plugin",
+"memory",
+"knowledge-base",
+"vault",
+"markdown",
+"knowledge-graph",
+"rag",
+"second-brain"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-ui-settings",
+"@deepseek-ai/dsh-client-locale"
+],
+"gold": "memory"
+},
+{
+"name": "dsh-plugin-om",
+"description": "DSH插件，以Observational Memory方式管理上下文",
+"topics": [
+"dsh-plugin"
+],
+"keywords": [
+"dsh",
+"deepseek",
+"harness",
+"plugin"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/cordis-plugin-loader",
+"@deepseek-ai/dsh-agent",
+"@deepseek-ai/dsh-agent-loop",
+"@deepseek-ai/dsh-attachment",
+"@deepseek-ai/dsh-attachment-local",
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-store",
+"@deepseek-ai/dsh-client-ui-chat",
+"@deepseek-ai/dsh-client-ui-conversation",
+"@deepseek-ai/dsh-client-ui-plugin-manager",
+"@deepseek-ai/dsh-client-ui-primitives",
+"@deepseek-ai/dsh-client-ui-renderer",
+"@deepseek-ai/dsh-client-ui-settings",
+"@deepseek-ai/dsh-client-ui-slots",
+"@deepseek-ai/dsh-compaction",
+"@deepseek-ai/dsh-compaction-tool-result-pruner",
+"@deepseek-ai/dsh-invariants",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-scope",
+"@deepseek-ai/dsh-session",
+"@deepseek-ai/dsh-session-format-v3-to-v4",
+"@deepseek-ai/dsh-session-log-export",
+"@deepseek-ai/dsh-session-persistence",
+"@deepseek-ai/dsh-session-persistence-jsonl",
+"@deepseek-ai/dsh-session-projection",
+"@deepseek-ai/dsh-session-query",
+"@deepseek-ai/dsh-session-query-sqlite",
+"@deepseek-ai/dsh-subagent",
+"@deepseek-ai/dsh-system-prompt",
+"@deepseek-ai/dsh-token-meter",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/dsh-user-approval",
+"@deepseek-ai/dsh-util-code-language",
+"@deepseek-ai/dsh-util-workspace-path",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-conversation",
+"@deepseek-ai/dsh-client-ui-settings",
+"@deepseek-ai/dsh-client-ui-plugin-manager"
+],
+"gold": "memory"
+},
+{
+"name": "dsh-session-conductor",
+"description": "DSH 会话功能增强插件（重命名/分支/归档）",
+"topics": [
+"dsh-plugin"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek-harness",
+"session",
+"session-manager",
+"archive",
+"restore",
+"delete",
+"auto-rename",
+"auto-resume",
+"interruption",
+"workspace",
+"group",
+"undo",
+"repair",
+"template-injection"
+],
+"dshDeps": [],
+"clientInject": [
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-settings-plugins",
+"@deepseek-ai/dsh-client-ui-settings"
+],
+"gold": "session"
+},
+{
+"name": "@michengai/dsh-btw",
+"description": "DSH 一次性只读旁问插件：基于当前上下文回答，独立气泡，不执行工具 · One-shot read-only side-ask plugi",
+"topics": [
+"deepseek",
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"dsh-plugins"
+],
+"keywords": [],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-agent",
+"@deepseek-ai/dsh-agent-loop",
+"@deepseek-ai/dsh-api-gateway",
+"@deepseek-ai/dsh-api-session-controller",
+"@deepseek-ai/dsh-attachment",
+"@deepseek-ai/dsh-client-connection",
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-chat",
+"@deepseek-ai/dsh-client-ui-conversation",
+"@deepseek-ai/dsh-client-ui-input-trigger",
+"@deepseek-ai/dsh-client-ui-renderer",
+"@deepseek-ai/dsh-client-ui-slots",
+"@deepseek-ai/dsh-client-ui-theme",
+"@deepseek-ai/dsh-commands",
+"@deepseek-ai/dsh-invariants",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-ptc-runtime",
+"@deepseek-ai/dsh-sandbox",
+"@deepseek-ai/dsh-sandbox-policy",
+"@deepseek-ai/dsh-scope",
+"@deepseek-ai/dsh-session",
+"@deepseek-ai/dsh-session-persistence",
+"@deepseek-ai/dsh-session-projection",
+"@deepseek-ai/dsh-subagent",
+"@deepseek-ai/dsh-subagent-fork-in-process",
+"@deepseek-ai/dsh-subagent-in-process-driver",
+"@deepseek-ai/dsh-system-prompt",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/dsh-typert-protocol",
+"@deepseek-ai/dsh-typert-registry",
+"@deepseek-ai/dsh-user-approval",
+"@deepseek-ai/dsh-util-time"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-ui-conversation",
+"@deepseek-ai/dsh-api-remotes",
+"@deepseek-ai/dsh-client-locale"
+],
+"gold": "session"
+},
+{
+"name": "@twinsearth/w2m-dsh-plugin",
+"description": "DSH: W2M — one DeepSeek account, one instruction, every online Windows",
+"topics": [
+"deepseek",
+"deepseek-harness",
+"dsh-plugin",
+"multi-machine",
+"orchestration",
+"windows2macos",
+"cordis-plugin",
+"dsh",
+"p2p",
+"dsh-bundle",
+"dsh-plugin-market",
+"dsh-plugins"
+],
+"keywords": [
+"dsh-bundle",
+"dsh-plugin",
+"deepseek-harness",
+"deepseek",
+"windows2macos",
+"w2m",
+"cross-platform",
+"multi-machine",
+"orchestration",
+"replicate",
+"sharding"
+],
+"dshDeps": [
+"@deepseek-ai/dsh-tools"
+],
+"clientInject": [],
+"gold": "bridge"
+},
+{
+"name": "@deepwhale-cn/dsh-data-classify",
+"description": "数据分类分级：查数据有没有分级标注与资产清单（数据安全法 21 条）。",
+"topics": [
+"china",
+"compliance",
+"data-classification",
+"data-governance",
+"data-security",
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"guard",
+"plugin",
+"privacy",
+"security"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek-harness",
+"plugin",
+"skill",
+"security",
+"guard",
+"data-classify",
+"data-classification",
+"data-grading",
+"数据分类分级",
+"数据分级",
+"数据清单",
+"数据安全法"
+],
+"dshDeps": [
+"@deepseek-ai/dsh-skill"
+],
+"clientInject": [],
+"gold": "safety"
+},
+{
+"name": "dsh-github-flow",
+"description": "让 DeepSeek Harness Agent 拥有操作 GitHub 的原生手脚！原生复用 gh CLI 安全凭证，支持 PR 自动创建",
+"topics": [
+"agent-tools",
+"ai-agent",
+"cordis",
+"deepseek-harness",
+"developer-tools",
+"dsh-plugin",
+"gh-cli",
+"github-cli",
+"github-flow",
+"workflow-automation"
+],
+"keywords": [
+"dsh-plugin",
+"deepseek-harness",
+"github",
+"gh-cli",
+"cordis"
+],
+"dshDeps": [
+"@deepseek-ai/cordis"
+],
+"clientInject": [],
+"gold": "dev"
+},
+{
+"name": "dsh-plugin-codex-bridge",
+"description": "让 Codex 与 DSH 开发会话协作：工作区实时同步 + 双向投递/交回，不抢会话写锁、不接管 Git、不需要重启",
+"topics": [
+"agent-collaboration",
+"codex",
+"cordis-plugin",
+"deepseek-harness",
+"dsh-plugin",
+"dsh-plugins"
+],
+"keywords": [
+"dsh-plugin",
+"deepseek-harness",
+"dsh",
+"workspace",
+"relay",
+"handoff",
+"codex"
+],
+"dshDeps": [],
+"clientInject": [],
+"gold": "dev"
+},
+{
+"name": "dsh-soul",
+"description": "The DeepSeek Harness Personalization Settings plugin is used to config",
+"topics": [
+"dsh-plugin",
+"javascript",
+"typescript",
+"custom-soul",
+"dsh-soul"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"dsh-soul",
+"deepseek",
+"deepseek-harness",
+"personalization",
+"persona",
+"system-prompt",
+"ai-assistant",
+"customization"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-tools"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-conversation"
+],
+"gold": "memory"
+},
+{
+"name": "dsh-plugin-siyuan",
+"description": "SiYuan integration for DeepSeek Harness",
+"topics": [
+"dsh-bundle",
+"dsh-plugin",
+"dsh-plugin-desktop",
+"dsh-plugins"
+],
+"keywords": [],
+"dshDeps": [],
+"clientInject": [],
+"gold": "bridge"
+},
+{
+"name": "@deepwhale-cn/dsh-pipia",
+"description": "个人信息保护影响评估：查是否按个保法 55 条做了评估、56 条留存三年。",
+"topics": [
+"china",
+"compliance",
+"deepseek-harness",
+"dpia",
+"dsh",
+"dsh-plugin",
+"guard",
+"pipl",
+"plugin",
+"privacy",
+"security",
+"pipia"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek-harness",
+"plugin",
+"skill",
+"security",
+"guard",
+"pipia",
+"pipia",
+"dpia",
+"privacy-impact-assessment",
+"个人信息保护影响评估",
+"影响评估",
+"合规审计"
+],
+"dshDeps": [
+"@deepseek-ai/dsh-skill"
+],
+"clientInject": [],
+"gold": "safety"
+},
+{
+"name": "dsh-plugin-subagent-director",
+"description": "Subagent Director: per-subagent LLM provider/model selection with role",
+"topics": [
+"dsh-plugin",
+"dsh",
+"plugin",
+"subagent"
+],
+"keywords": [
+"dsh",
+"deepseek-harness",
+"cordis",
+"plugin",
+"subagent",
+"subagent-director",
+"llm",
+"provider",
+"model",
+"role-template"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-agent",
+"@deepseek-ai/dsh-api-remotes",
+"@deepseek-ai/dsh-api-session-controller",
+"@deepseek-ai/dsh-attachment",
+"@deepseek-ai/dsh-brand",
+"@deepseek-ai/dsh-client-connection",
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-store",
+"@deepseek-ai/dsh-client-ui-chat",
+"@deepseek-ai/dsh-client-ui-conversation",
+"@deepseek-ai/dsh-client-ui-plugin-manager",
+"@deepseek-ai/dsh-client-ui-primitives",
+"@deepseek-ai/dsh-client-ui-renderer",
+"@deepseek-ai/dsh-client-ui-session",
+"@deepseek-ai/dsh-client-ui-settings",
+"@deepseek-ai/dsh-client-ui-slots",
+"@deepseek-ai/dsh-invariants",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-ptc-runtime",
+"@deepseek-ai/dsh-sandbox",
+"@deepseek-ai/dsh-sandbox-policy",
+"@deepseek-ai/dsh-scope",
+"@deepseek-ai/dsh-session",
+"@deepseek-ai/dsh-session-projection",
+"@deepseek-ai/dsh-settings",
+"@deepseek-ai/dsh-subagent",
+"@deepseek-ai/dsh-system-prompt",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/dsh-typert-protocol",
+"@deepseek-ai/dsh-user-approval",
+"@deepseek-ai/dsh-util-time",
+"@deepseek-ai/dsh-util-values",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [
+"slots",
+"locale",
+"connection",
+"remote"
+],
+"gold": "agent"
+},
+{
+"name": "@deepwhale-cn/dsh-minor-guard",
+"description": "未成年人保护：查不满 14 周岁个人信息有没有监护人同意、专门规则、年龄门槛。",
+"topics": [
+"china",
+"compliance",
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"guard",
+"minor-protection",
+"pipl",
+"plugin",
+"privacy",
+"security",
+"children-privacy"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek-harness",
+"plugin",
+"skill",
+"security",
+"guard",
+"minor-guard",
+"minor-protection",
+"children-data",
+"未成年人",
+"儿童个人信息",
+"监护人同意",
+"青少年模式",
+"pipl"
+],
+"dshDeps": [
+"@deepseek-ai/dsh-skill"
+],
+"clientInject": [],
+"gold": "safety"
+},
+{
+"name": "dsh-phone-inbox",
+"description": "DeepSeek Harness 插件 — 手机（微信桥）入站附件的受控清单与按需取用：让 agent 知道本会话收到了哪些附件，并把选中的",
+"topics": [
+"attachment",
+"cordis",
+"deepseek",
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"inbox",
+"phone",
+"wechat"
+],
+"keywords": [
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"cordis",
+"wechat",
+"inbox",
+"attachment",
+"phone"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-attachment",
+"@deepseek-ai/dsh-session",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [],
+"gold": "bridge"
+},
+{
+"name": "dsh-eval-control",
+"description": "Host-side DSH evaluation control plugin for aeval：一次评测试次的配置注入、预算封顶与证据归",
+"topics": [
+"agent-evaluation",
+"deepseek-harness",
+"dsh-plugin",
+"dsh-plugins"
+],
+"keywords": [
+"aeval",
+"dsh",
+"deepseek-harness",
+"cordis",
+"dsh-plugin",
+"agent-evaluation",
+"gateway-lease",
+"eval-harness"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh",
+"@deepseek-ai/dsh-acp",
+"@deepseek-ai/dsh-agent",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-ptc-runtime",
+"@deepseek-ai/dsh-scope",
+"@deepseek-ai/dsh-sdk-protocol",
+"@deepseek-ai/dsh-session",
+"@deepseek-ai/dsh-session-persistence",
+"@deepseek-ai/dsh-session-persistence-jsonl",
+"@deepseek-ai/dsh-system-prompt",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-ui-conversation"
+],
+"gold": "model"
+},
+{
+"name": "dsh-vscode-mode",
+"description": "VSCode-style coding for DeepSeek Harness: Monaco editor (tabs/QuickOpe",
+"topics": [
+"deepseek-harness",
+"deepseek-harness-plugin",
+"deepseek-harness-plugins",
+"code-review",
+"diff",
+"dsh",
+"dsh-plugin",
+"editor",
+"monaco",
+"monaco-editor",
+"plugin",
+"vscode"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek",
+"deepseek-harness",
+"plugin",
+"vscode",
+"editor",
+"monaco",
+"monaco-editor",
+"diff",
+"diff-review",
+"code-review",
+"diff-viewer",
+"files"
+],
+"dshDeps": [
+"@deepseek-ai/dsh-client-ui-primitives",
+"@deepseek-ai/dsh-client-ui-settings",
+"@deepseek-ai/dsh-client-ui-slots",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-settings",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [],
+"gold": "dev"
+},
+{
+"name": "dsh-plugin-mobile-bridge",
+"description": "给 DeepSeek Harness 用的手机端插件：在手机上发图/发视频/下发任务、实时看输出、插话与撤回、把电脑给的素材存进相册；局域网",
+"topics": [
+"cloudflare-tunnel",
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"mobile",
+"remote-control",
+"self-hosted",
+"cordis-plugin",
+"tailscale-funnel"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"mobile",
+"remote"
+],
+"dshDeps": [
+"@deepseek-ai/cordis"
+],
+"clientInject": [],
+"gold": "bridge"
+},
+{
+"name": "dsh-onebot-hub",
+"description": "OneBot v11 hub for DeepSeek Harness: relays QQ events verbatim to down",
+"topics": [
+"agent",
+"cordis",
+"deepseek-harness",
+"dsh-plugin",
+"nonebot",
+"onebot",
+"onebot-v11",
+"qq"
+],
+"keywords": [
+"dsh-plugin",
+"deepseek-harness",
+"cordis",
+"onebot",
+"onebot-v11",
+"qq",
+"nonebot",
+"agent",
+"llm"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-agent",
+"@deepseek-ai/dsh-agent-default-model",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-session",
+"@deepseek-ai/dsh-system-prompt",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-ui-settings",
+"@deepseek-ai/dsh-client-ui-slots",
+"@deepseek-ai/dsh-client-ui-renderer"
+],
+"gold": "bridge"
+},
+{
+"name": "dsh-continual-evolve",
+"description": "Continual self-evolution plugin for DeepSeek Harness: versioned, audit",
+"topics": [
+"ai-agent",
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"self-evolving-agents",
+"typescript",
+"deepseek-harness-plugin",
+"dsh-plugins"
+],
+"keywords": [],
+"dshDeps": [
+"@deepseek-ai/schemastery"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-settings",
+"@deepseek-ai/dsh-client-ui-theme"
+],
+"gold": "memory"
+},
+{
+"name": "dsh-ollama-usage",
+"description": "Ollama Cloud 用量余量可视化 DeepSeek Harness 插件:5h 会话/周用量双横条 + 设置页面板,Key 与快照持",
+"topics": [
+"deepseek-harness",
+"dsh-plugin",
+"ollama",
+"usage",
+"web-ui",
+"ollama-cloud"
+],
+"keywords": [
+"deepseek",
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"client-plugin",
+"ollama",
+"ollama-cloud",
+"usage",
+"quota",
+"session",
+"web-ui",
+"zh",
+"en"
+],
+"dshDeps": [
+"@deepseek-ai/dsh-home-paths"
+],
+"clientInject": [
+"slots",
+"connection",
+"timer"
+],
+"gold": "model"
+},
+{
+"name": "dsh-skills-mcp-group-manager",
+"description": "DeepSeek Harness Skills & MCPs 分组管理器 — 分组管理 Skills、过滤模型技能目录、独立开关 MCP 服",
+"topics": [
+"dsh",
+"dsh-bundle",
+"dsh-plugin",
+"dsh-plugins",
+"mcp",
+"skill",
+"skills"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek-harness",
+"skills",
+"mcp",
+"group-manager",
+"skill-groups"
+],
+"dshDeps": [
+"@deepseek-ai/dsh-mcp-client",
+"@deepseek-ai/dsh-tools"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-conversation",
+"@deepseek-ai/dsh-client-ui-layout"
+],
+"gold": "tools"
+},
+{
+"name": "dsh-open-code-review",
+"description": "代码评审插件（DeepSeek Harness × 阿里 OpenCodeReview）：默认不打扰，回合尾部一个按钮或一句「跑一次评审」即",
+"topics": [
+"code-review",
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"ocr",
+"opencode-review"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek-harness",
+"code-review",
+"open-code-review",
+"ocr"
+],
+"dshDeps": [
+"@deepseek-ai/schemastery"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-ui-settings",
+"@deepseek-ai/dsh-api-remotes"
+],
+"gold": "dev"
+},
+{
+"name": "dsh-yolo-mode",
+"description": "dsh-yolo-mode - an LLM-powered auto-approval plugin for DeepSeek Harne",
+"topics": [
+"approval",
+"deepseek-harness",
+"dsh",
+"llm",
+"sandbox",
+"dsh-plugin",
+"dsh-plugins"
+],
+"keywords": [
+"dsh",
+"deepseek-harness",
+"plugin",
+"approval",
+"sandbox",
+"permissions",
+"llm",
+"yolo",
+"self-hosted"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-client-connection",
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-slots",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-settings",
+"@deepseek-ai/dsh-timeout",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [
+"slots",
+"locale",
+"connection",
+"remote",
+"remote.llm",
+"remote.session"
+],
+"gold": "agent"
+},
+{
+"name": "@dsh-external/dsh-newtype-multititle",
+"description": "DSH 自由工作台插件 —— tab 化多会话 · 自由分栏 · 每窗格宿主原版对话框 (DeepSeek Harness plugin)",
+"topics": [
+"dsh-plugin",
+"deepseek",
+"deepseek-harness",
+"dsh",
+"workbench"
+],
+"keywords": [],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-client-ui-slots"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-ui-slots"
+],
+"gold": "ui"
+},
+{
+"name": "dsh-notify-windows",
+"description": "",
+"topics": [
+"deepseek-harness",
+"dsh-plugin",
+"notifications",
+"windows",
+"dsh-plugins"
+],
+"keywords": [
+"deepseek-harness",
+"dsh",
+"plugin",
+"notify",
+"toast",
+"windows"
+],
+"dshDeps": [
+"@deepseek-ai/cordis"
+],
+"clientInject": [],
+"gold": "bridge"
+},
+{
+"name": "project-blueprint",
+"description": "Make any project AI-agent-ready in one command. Adaptive tech stack de",
+"topics": [
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"agent-skills",
+"ai-coding",
+"claude-code",
+"codex",
+"coding-conventions",
+"cursor",
+"harness-engineering",
+"opencode",
+"scaffolding",
+"skills",
+"spec-driven"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek-harness",
+"deepseek",
+"agent-skills",
+"skills",
+"project-blueprint",
+"coding-conventions",
+"scaffolding",
+"ai-agents"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-skill",
+"@deepseek-ai/dsh-skill-filesystem"
+],
+"clientInject": [],
+"gold": "dev"
+},
+{
+"name": "dsh-ssh-tui",
+"description": "DSH Relay — remote-first terminal UI for DeepSeek Harness coding agent",
+"topics": [
+"tui",
+"deepseek",
+"cli",
+"coding-agent",
+"conpty",
+"deepseek-harness",
+"deepseek-harness-plugins",
+"remote-development",
+"windows-terminal",
+"dsh-plugin"
+],
+"keywords": [
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"tui",
+"terminal",
+"ssh",
+"coding-agent",
+"cli",
+"remote-development",
+"windows-terminal",
+"conpty"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/cordis-plugin-group",
+"@deepseek-ai/cordis-plugin-hmr",
+"@deepseek-ai/cordis-plugin-include",
+"@deepseek-ai/cordis-plugin-loader",
+"@deepseek-ai/cordis-plugin-timer",
+"@deepseek-ai/dsh",
+"@deepseek-ai/dsh-agent",
+"@deepseek-ai/dsh-agent-default-model",
+"@deepseek-ai/dsh-agent-loop",
+"@deepseek-ai/dsh-agent-preset",
+"@deepseek-ai/dsh-agent-preset-registry",
+"@deepseek-ai/dsh-atomic-write",
+"@deepseek-ai/dsh-attachment",
+"@deepseek-ai/dsh-brand",
+"@deepseek-ai/dsh-cmdline",
+"@deepseek-ai/dsh-commands",
+"@deepseek-ai/dsh-credentials",
+"@deepseek-ai/dsh-home-paths",
+"@deepseek-ai/dsh-invariants",
+"@deepseek-ai/dsh-jobs",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-llm-mock-server",
+"@deepseek-ai/dsh-sandbox",
+"@deepseek-ai/dsh-sandbox-policy",
+"@deepseek-ai/dsh-scope",
+"@deepseek-ai/dsh-session",
+"@deepseek-ai/dsh-session-persistence",
+"@deepseek-ai/dsh-session-projection",
+"@deepseek-ai/dsh-session-projection-cache",
+"@deepseek-ai/dsh-settings",
+"@deepseek-ai/dsh-subagent",
+"@deepseek-ai/dsh-system-prompt",
+"@deepseek-ai/dsh-timeout",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/dsh-typert-protocol",
+"@deepseek-ai/dsh-user-approval",
+"@deepseek-ai/dsh-user-questions",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [],
+"gold": "bridge"
+},
+{
+"name": "dsh-my-export-plugin",
+"description": "DeepSeek Harness 会话导出插件：在 dsh Web 会话「更多」菜单注入「导出 Markdown / 导出 PDF」，纯前端",
+"topics": [
+"deepseek-harness",
+"dsh-plugin"
+],
+"keywords": [
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"cordis",
+"export",
+"markdown",
+"pdf",
+"print",
+"session-log"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/dsh-host-webserver"
+],
+"clientInject": [],
+"gold": "session"
+},
+{
+"name": "answer-me-with-html",
+"description": "Answer me with HTML — an agent skill that answers hard questions with ",
+"topics": [
+"agent-skill",
+"ai-agent",
+"claude-code",
+"cli",
+"diagram",
+"explainer",
+"html",
+"llm",
+"ste100",
+"claude-code-skill",
+"claude-skill",
+"claude-skills",
+"dsh-plugin"
+],
+"keywords": [
+"llm",
+"agent",
+"skill",
+"html",
+"explainer",
+"diagram",
+"ste100"
+],
+"dshDeps": [],
+"clientInject": [],
+"gold": "domain"
+},
+{
+"name": "dsh-continual-harness",
+"description": "DeepSeek Harness (DSH) plugin for self-improving AI agents: continual ",
+"topics": [
+"dsh",
+"deepseek",
+"deepseek-harness",
+"dsh-plugin",
+"self-evolution",
+"agent-memory",
+"ai-agent",
+"continual-learning",
+"self-improving-agents",
+"rsi",
+"self-improving"
+],
+"keywords": [
+"deepseek-harness",
+"plugin",
+"self-improvement",
+"continual-harness",
+"agent"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/cosmokit",
+"@deepseek-ai/dsh-agent",
+"@deepseek-ai/dsh-home-paths",
+"@deepseek-ai/dsh-invariants",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-scope",
+"@deepseek-ai/dsh-session",
+"@deepseek-ai/dsh-session-persistence",
+"@deepseek-ai/dsh-session-persistence-jsonl",
+"@deepseek-ai/dsh-system-prompt",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/dsh-util-values",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [],
+"gold": "memory"
+},
+{
+"name": "GitPanel",
+"description": "一个类似 intellij-idea 中 Git 插件UI 的  dsh git 插件",
+"topics": [
+"deepseek",
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"dsh-plugins",
+"git",
+"git-ui",
+"intellij-idea",
+"intellij-plugin"
+],
+"keywords": [],
+"dshDeps": [],
+"clientInject": [
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-sidebar-right",
+"@deepseek-ai/dsh-client-ui-session",
+"@deepseek-ai/dsh-client-ui-settings",
+"@deepseek-ai/dsh-client-ui-primitives"
+],
+"gold": "dev"
+},
+{
+"name": "dsh-context-care",
+"description": "DeepSeek Harness 的疲劳度、唤醒值与自主上下文压缩 Cordis 插件",
+"topics": [
+"ai-agent",
+"context-compaction",
+"context-management",
+"cordis",
+"deepseek",
+"deepseek-harness",
+"llm",
+"plugin",
+"dsh-plugin"
+],
+"keywords": [
+"deepseek-harness",
+"cordis",
+"context-management",
+"context-compaction",
+"llm",
+"agent"
+],
+"dshDeps": [
+"@deepseek-ai/cordis"
+],
+"clientInject": [
+"@deepseek-ai/dsh-client-ui-conversation",
+"@deepseek-ai/dsh-api-session-controller",
+"@deepseek-ai/dsh-client-locale",
+"@deepseek-ai/dsh-client-ui-sidebar-right",
+"@deepseek-ai/dsh-client-layout"
+],
+"gold": "memory"
+},
+{
+"name": "billion-context",
+"description": "A context-compression plugin for small context windows (a 100K context",
+"topics": [
+"dsh-plugin"
+],
+"keywords": [
+"context",
+"compression",
+"proxy",
+"acp",
+"ai",
+"agent",
+"claude-code",
+"cursor",
+"codex",
+"aider",
+"anthropic",
+"openai",
+"pi-package"
+],
+"dshDeps": [],
+"clientInject": [],
+"gold": "memory"
+},
+{
+"name": "dsh-windows-mcp-lite",
+"description": "Config-only DeepSeek Harness bundle that mounts the in-box MCP client ",
+"topics": [
+"computer-use",
+"deepseek-harness",
+"desktop-automation",
+"dsh",
+"dsh-plugin",
+"mcp",
+"windows"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek-harness",
+"mcp",
+"windows",
+"windows-mcp",
+"desktop-automation",
+"ui-automation",
+"stdio"
+],
+"dshDeps": [],
+"clientInject": [],
+"gold": "tools"
+},
+{
+"name": "dsh-rea-mcp",
+"description": "Config-only DeepSeek Harness bundle that mounts the in-box MCP client ",
+"topics": [
+"deepseek-harness",
+"dsh",
+"dsh-plugin",
+"mcp",
+"rea",
+"reverse-engineering"
+],
+"keywords": [
+"dsh",
+"dsh-plugin",
+"deepseek-harness",
+"mcp",
+"rea",
+"reverse-engineering",
+"binary-analysis",
+"decompiler",
+"disassembler",
+"ai-agents",
+"stdio"
+],
+"dshDeps": [],
+"clientInject": [],
+"gold": "tools"
+},
+{
+"name": "@deepseek-harness-tui/dsh-tui",
+"description": "DSH's officially top-recommended TUI plugin — high performance, low ov",
+"topics": [
+"claude-code",
+"coding-agent",
+"deepseek",
+"deepseek-harness",
+"dsh-plugin",
+"ink",
+"react",
+"terminal",
+"tui"
+],
+"keywords": [
+"dsh",
+"dsh-tui",
+"deepseek",
+"deepseek-harness",
+"cordis",
+"tui",
+"terminal",
+"cli",
+"ink",
+"agent",
+"coding-agent"
+],
+"dshDeps": [
+"@deepseek-ai/cordis",
+"@deepseek-ai/cordis-plugin-group",
+"@deepseek-ai/cordis-plugin-include",
+"@deepseek-ai/cordis-plugin-loader",
+"@deepseek-ai/cordis-plugin-timer",
+"@deepseek-ai/cosmokit",
+"@deepseek-ai/dsh-agent",
+"@deepseek-ai/dsh-agent-instructions",
+"@deepseek-ai/dsh-agent-loop",
+"@deepseek-ai/dsh-agent-preset-registry",
+"@deepseek-ai/dsh-app-boot",
+"@deepseek-ai/dsh-atomic-write",
+"@deepseek-ai/dsh-attachment",
+"@deepseek-ai/dsh-brand",
+"@deepseek-ai/dsh-cmdline",
+"@deepseek-ai/dsh-command-compact",
+"@deepseek-ai/dsh-commands",
+"@deepseek-ai/dsh-compaction-basic",
+"@deepseek-ai/dsh-compaction-tool-result-pruner",
+"@deepseek-ai/dsh-cordis-host-runner",
+"@deepseek-ai/dsh-deepseek-account",
+"@deepseek-ai/dsh-fs",
+"@deepseek-ai/dsh-fs-local",
+"@deepseek-ai/dsh-home-paths",
+"@deepseek-ai/dsh-host-webserver",
+"@deepseek-ai/dsh-http-proxy",
+"@deepseek-ai/dsh-invariants",
+"@deepseek-ai/dsh-launch-environment",
+"@deepseek-ai/dsh-llm",
+"@deepseek-ai/dsh-llm-pi-ai",
+"@deepseek-ai/dsh-persona",
+"@deepseek-ai/dsh-plan-mode",
+"@deepseek-ai/dsh-plugin-manager",
+"@deepseek-ai/dsh-ptc-runtime",
+"@deepseek-ai/dsh-ptc-runtime-node",
+"@deepseek-ai/dsh-sandbox",
+"@deepseek-ai/dsh-sandbox-policy",
+"@deepseek-ai/dsh-scope",
+"@deepseek-ai/dsh-session",
+"@deepseek-ai/dsh-session-format-catalog",
+"@deepseek-ai/dsh-session-format-v3-to-v4",
+"@deepseek-ai/dsh-session-persistence",
+"@deepseek-ai/dsh-session-persistence-jsonl",
+"@deepseek-ai/dsh-session-projection",
+"@deepseek-ai/dsh-settings",
+"@deepseek-ai/dsh-skill",
+"@deepseek-ai/dsh-skill-filesystem",
+"@deepseek-ai/dsh-storage",
+"@deepseek-ai/dsh-storage-domain",
+"@deepseek-ai/dsh-storage-json",
+"@deepseek-ai/dsh-subprocess",
+"@deepseek-ai/dsh-system-prompt",
+"@deepseek-ai/dsh-terminal",
+"@deepseek-ai/dsh-terminal-bash",
+"@deepseek-ai/dsh-timeout",
+"@deepseek-ai/dsh-tool-ask-user",
+"@deepseek-ai/dsh-tool-bash-persistent",
+"@deepseek-ai/dsh-tool-cordis",
+"@deepseek-ai/dsh-tool-fs",
+"@deepseek-ai/dsh-tool-fs-search",
+"@deepseek-ai/dsh-tool-goal",
+"@deepseek-ai/dsh-tool-jobs",
+"@deepseek-ai/dsh-tool-ralph",
+"@deepseek-ai/dsh-tool-str-replace-editor",
+"@deepseek-ai/dsh-tool-subagent",
+"@deepseek-ai/dsh-tool-subagent-control",
+"@deepseek-ai/dsh-tool-todo",
+"@deepseek-ai/dsh-tool-web",
+"@deepseek-ai/dsh-tool-workflow",
+"@deepseek-ai/dsh-tools",
+"@deepseek-ai/dsh-typert-protocol",
+"@deepseek-ai/dsh-user-approval",
+"@deepseek-ai/dsh-user-questions",
+"@deepseek-ai/dsh-web-app",
+"@deepseek-ai/dsh-workflow-ptc",
+"@deepseek-ai/dsh-workspace",
+"@deepseek-ai/schemastery"
+],
+"clientInject": [],
+"gold": "ui"
+}
+]
