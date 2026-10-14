@@ -22,11 +22,18 @@ function optional(ctx, name) {
   try { return ctx.get?.(name); } catch { return undefined; }
 }
 
-/** 官方 pluginManager Remote：只读方法。拿不到时返回 undefined，界面降级。 */
+/**
+ * 官方 pluginManager Remote：只读方法。拿不到时返回 undefined，界面降级。
+ * 注意：真实 cordis 里 remote 是按调用方代理的服务，读嵌套服务属性 remote.pluginManager
+ * 会抛 cannot get property "remote.pluginManager" without inject——曾因此让整个 web boot 失败。
+ * 所以只走 ctx.get（不检查 inject），且每一步都在 try 里。
+ */
 export function pluginManagerOf(ctx) {
-  const remote = optional(ctx, 'remote');
-  const pm = remote?.pluginManager ?? optional(ctx, 'remote.pluginManager');
-  return pm && typeof pm.listBundles === 'function' ? { pm, remote } : undefined;
+  try {
+    const pm = optional(ctx, 'remote.pluginManager');
+    if (!pm || typeof pm.listBundles !== 'function') return undefined;
+    return { pm, remote: optional(ctx, 'remote') };
+  } catch { return undefined; }
 }
 
 /** 已安装包名：listBundles 中 installed 的名字；监听官方 plugin-manager/changed。 */
@@ -90,7 +97,8 @@ export function apply(ctx) {
   ctx.effect(installStyle, 'scout: stylesheet');
 
   const installed = createInstalledStore(ctx);
-  ctx.effect(() => installed.watch(), 'scout: installed watch');
+  // 可选能力绝不能拖垮激活：watch 失败只降级，不抛出到 fiber。
+  ctx.effect(() => { try { return installed.watch(); } catch { return undefined; } }, 'scout: installed watch');
   const badges = createBadgeCache();
   let pending;
 
@@ -98,7 +106,9 @@ export function apply(ctx) {
     useInstalled: () => useSyncExternalStore(installed.subscribe, installed.get, installed.get),
     inspect: pluginManagerOf(ctx) ? async (spec) => {
       try {
-        const res = await pluginManagerOf(ctx).pm.inspect(spec, {});
+        const got = pluginManagerOf(ctx);
+        if (!got) return { error: '官方插件管理服务暂不可用' };
+        const res = await got.pm.inspect(spec, {});
         if (res?.ok === false) return { error: res.error?.message ?? 'failed' };
         return res?.ok ? res.value : res;
       } catch (e) { return { error: e.message }; }

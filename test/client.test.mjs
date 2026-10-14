@@ -132,7 +132,7 @@ test('page → drawer: lists, inspects through official pluginManager, risky cop
     inspect: async (spec) => { inspected.push(spec); return { ok: true, value: { status: 'accepted', kind: 'registry', name: 'alpha', version: '1.0.0', bundle: true, registry: 'https://registry.npmjs.org/' } }; },
     install: () => assert.fail('scout must never install'), removeBundle: () => assert.fail('never remove'), setBundleEnabled: () => assert.fail('never toggle'),
   };
-  const ctx = mockContext({ remote: { pluginManager: pm, $on: () => () => {} }, pluginNavigation: { openBundle: (n) => opened.push(['bundle', n]) }, layout: { selectPanel: (p) => opened.push(['panel', p]) } });
+  const ctx = mockContext({ remote: { $on: () => () => {} }, 'remote.pluginManager': pm, pluginNavigation: { openBundle: (n) => opened.push(['bundle', n]) }, layout: { selectPanel: (p) => opened.push(['panel', p]) } });
   client.apply(ctx);
   const Page = ctx.registrations.find((r) => r.options.name === 'main').component;
   const v = await render(React.createElement(Page));
@@ -173,6 +173,47 @@ test('page → drawer: lists, inspects through official pluginManager, risky cop
 
   await v.close();
   ctx.dispose();
+});
+
+// 回归：真实 cordis 的 ctx 代理比 mockContext 严格——读未 inject 的属性（含嵌套服务 remote.pluginManager）会抛错，
+// 一旦在 apply 或其 effect 里抛出，fiber 进 FAILED，DSH web boot 报「dsh-plugin-scout: failed」，桌面端起不来。
+// 这里用 App 同版本的 cordis（4.0.4），按官方结构把 pluginManager 挂成独立服务 remote.pluginManager。
+test('activates under real cordis with and without the official remote.pluginManager service', async () => {
+  const { Context, Service } = await import('@deepseek-ai/cordis');
+  const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+  for (const withRemote of [true, false]) {
+    const root = new Context();
+    const seen = [];
+    let listed = 0;
+    root.plugin(class extends Service {
+      constructor(ctx) { super(ctx, 'slots'); }
+      inject(_key, cb) { return cb(); }
+      register(options) { seen.push(options.name); return () => {}; }
+    });
+    root.plugin(class extends Service {
+      constructor(ctx) { super(ctx, 'locale'); }
+      register() { return () => {}; }
+      bind() { return (k) => k; }
+    });
+    if (withRemote) {
+      root.plugin(class extends Service { constructor(ctx) { super(ctx, 'remote'); } $on() { return () => {}; } });
+      await tick();
+      root.plugin(class extends Service {
+        constructor(ctx) { super(ctx, 'remote.pluginManager'); }
+        async listBundles() { listed++; return { ok: true, value: [] }; }
+        async inspect() { return { ok: true, value: {} }; }
+      });
+    }
+    await tick();
+    const fiber = root.plugin({ name: ID, inject: client.inject, apply: client.apply });
+    await fiber;
+    await tick();
+    assert.equal(fiber.state, 2, `fiber ACTIVE (withRemote=${withRemote}), not FAILED`);
+    assert.deepEqual(seen.sort(), ['main', 'plugins.detail.badge', 'plugins.detail.section', 'sidebar.panellist']);
+    await fiber.dispose();
+    void listed;
+  }
+  document.querySelectorAll('style[data-scout]').forEach((s) => s.remove());
 });
 
 test('without the official pluginManager the page still works and inspect is hidden', async () => {
