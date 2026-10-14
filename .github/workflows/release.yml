@@ -1,7 +1,9 @@
 name: release
 
 # Push a tag v<version> matching package.json to publish the prebuilt bundle to npm
-# with provenance, and attach the same tarball to a GitHub Release.
+# and attach the same tarball to a GitHub Release. npm auth is Trusted Publishing
+# (OIDC, configured with `npm trust github`); no long-lived token is stored, and
+# provenance is attached automatically. Trusted Publishing needs npm >= 11.5.1.
 on:
   push:
     tags: ['v*']
@@ -22,12 +24,19 @@ jobs:
           cache: npm
       - name: tag matches package.json
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm install -g npm@^11.5.1
       - run: npm ci --ignore-scripts
       - run: npm test
-      - run: npm pack
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: publish (or reuse the already-published tarball)
+        run: |
+          v=$(node -p "require('./package.json').version")
+          if npm view "dsh-plugin-scout@$v" version >/dev/null 2>&1; then
+            echo "dsh-plugin-scout@$v is already on npm; attaching the registry tarball as-is"
+            npm pack "dsh-plugin-scout@$v"
+          else
+            npm pack
+            npm publish "dsh-plugin-scout-$v.tgz" --provenance --access public
+          fi
       - name: GitHub Release
         run: gh release create "$GITHUB_REF_NAME" dsh-plugin-scout-*.tgz --title "$GITHUB_REF_NAME" --generate-notes
         env:

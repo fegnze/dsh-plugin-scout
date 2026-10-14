@@ -134,5 +134,5 @@ Based on the official repository's `docs/user/develop/basic/publish`, `docs/cook
 ## Releasing
 
 1. Bump `version` in `package.json` and commit.
-2. `git tag v<version> && git push --tags`. The `release` workflow runs the tests, runs `npm publish --provenance`, and attaches the same tgz to a GitHub Release. The repository needs an `NPM_TOKEN` secret (an npm Automation token).
+2. `git tag v<version> && git push --tags`. The `release` workflow runs the tests, runs `npm publish --provenance`, and attaches the same tgz to a GitHub Release. npm authenticates the workflow through Trusted Publishing (OIDC), so no npm token is stored in the repository; provenance is attached automatically. One-time setup on npmjs.com → package Settings → Trusted Publisher (GitHub Actions, workflow `release.yml`), or: `npx npm@latest trust github dsh-plugin-scout --file release.yml --repo fegnze/dsh-plugin-scout --allow-publish`.
 3. Keep the repository public with the `dsh-plugin` topic so it appears on https://github.com/topics/dsh-plugin and in Scout itself.

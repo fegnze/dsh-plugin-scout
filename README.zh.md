@@ -132,5 +132,5 @@ npm test          # 先构建 lib/，再跑 core / host / client / manifest 四�
 ## 发布
 
 1. 改 `package.json` 的 `version`，提交。
-2. `git tag v<version> && git push --tags`。`release` 工作流会跑测试，执行 `npm publish --provenance`，并把同一个 tgz 挂到 GitHub Release。仓库需要配置 secret `NPM_TOKEN`（npm 的 Automation token）。
+2. `git tag v<version> && git push --tags`。`release` 工作流会跑测试，执行 `npm publish --provenance`，并把同一个 tgz 挂到 GitHub Release。npm 通过可信发布（Trusted Publishing，OIDC）认证工作流，仓库里不存 npm token，provenance 自动附带。一次性配置：npmjs.com → 包 Settings → Trusted Publisher（GitHub Actions，工作流 `release.yml`），或：`npx npm@latest trust github dsh-plugin-scout --file release.yml --repo fegnze/dsh-plugin-scout --allow-publish`。
 3. 仓库保持 public，并带 topic `dsh-plugin`，这样才会出现在 https://github.com/topics/dsh-plugin，也能被 Scout 自己收录。
