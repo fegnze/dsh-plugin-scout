@@ -130,7 +130,7 @@ test('page → drawer: lists, inspects through official pluginManager, risky cop
   const pm = {
     listBundles: async () => ({ ok: true, value: [{ name: 'alpha', installed: true }] }),
     inspect: async (spec) => { inspected.push(spec); return { ok: true, value: { status: 'accepted', kind: 'registry', name: 'alpha', version: '1.0.0', bundle: true, registry: 'https://registry.npmjs.org/' } }; },
-    install: () => assert.fail('scout must never install'), removeBundle: () => assert.fail('never remove'), setBundleEnabled: () => assert.fail('never toggle'),
+    installBundle: () => assert.fail('installed plugin: no install'), removeBundle: () => assert.fail('never remove'), setBundleEnabled: () => assert.fail('never toggle without a click'),
   };
   const ctx = mockContext({ remote: { $on: () => () => {} }, 'remote.pluginManager': pm, pluginNavigation: { openBundle: (n) => opened.push(['bundle', n]) }, layout: { selectPanel: (p) => opened.push(['panel', p]) } });
   client.apply(ctx);
@@ -170,6 +170,7 @@ test('page → drawer: lists, inspects through official pluginManager, risky cop
   assert.deepEqual(copied, ['github:x/evil']);
   await act(async () => find(d2, 'button', /去插件页添加/).click());
   assert.deepEqual(opened.at(-1), ['panel', 'plugins'], 'not installed → official Plugins page, where the user pastes the spec');
+  assert.ok(find(d2, 'button', /^安装$/), 'one-click install offered next to the fallback');
 
   await v.close();
   ctx.dispose();
@@ -226,6 +227,114 @@ test('without the official pluginManager the page still works and inspect is hid
   await flush();
   const drawer = document.querySelector('[data-scout-drawer]');
   assert.equal(find(drawer, 'button', /^预检/), undefined);
+  assert.equal(find(drawer, 'button', /^安装$/), undefined, 'no official installer → no install button, only copy + jump');
+  await v.close();
+  ctx.dispose();
+});
+
+/** 假官方 pluginManager：记录调用，按脚本给出 installBundle 的结果；会发 install-state 事件。 */
+function fakeManager(script) {
+  const calls = [];
+  const handlers = {};
+  const pm = {
+    listBundles: async () => ({ ok: true, value: [] }),
+    inspect: async (spec, o) => { calls.push(['inspect', spec, o]); return { ok: true, value: { status: 'accepted', kind: 'registry', name: spec.split('@')[0], version: '1.0.0', bundle: true, registry: 'https://registry.npmjs.org/' } }; },
+    installBundle: async (spec, o) => {
+      calls.push(['installBundle', spec, o]);
+      handlers['plugin-manager/install-state']?.({ requestId: o.requestId, phase: 'installing' });
+      handlers['plugin-manager/install-log']?.({ requestId: o.requestId, text: 'Progress: resolved 12\n' });
+      return script.shift()(spec, o);
+    },
+    setBundleEnabled: async (name, on) => { calls.push(['setBundleEnabled', name, on]); return { ok: true, value: { changed: true, application: 'applied', stage: 'enable', target: name } }; },
+    cancelInstall: async (id) => { calls.push(['cancelInstall', id]); return { ok: true, value: { status: 'cancelled' } }; },
+    removeBundle: () => assert.fail('scout never uninstalls'),
+  };
+  const remote = { $on: (e, fn) => { handlers[e] = fn; return () => { delete handlers[e]; }; } };
+  return { pm, remote, calls };
+}
+
+async function openDrawer(ctx, index) {
+  const Page = ctx.registrations.find((r) => r.options.name === 'main').component;
+  const v = await render(React.createElement(Page));
+  await flush();
+  await act(async () => v.container.querySelectorAll('.scx-item')[index].click());
+  await flush();
+  return { v, drawer: document.querySelector('[data-scout-drawer]') };
+}
+
+test('one-click install goes through official inspect → installBundle(enabled:false), then enable is a separate click', async () => {
+  const { pm, remote, calls } = fakeManager([(spec) => ({ ok: true, value: { changed: true, application: 'applied', stage: 'install', target: spec, bundle: 'alpha' } })]);
+  const ctx = mockContext({ remote, 'remote.pluginManager': pm, layout: { selectPanel() {} } });
+  client.apply(ctx);
+  const { v, drawer } = await openDrawer(ctx, 0);
+  await act(async () => find(drawer, 'button', /^安装$/).click());
+  await flush();
+  assert.deepEqual(calls.map((c) => c[0]), ['inspect', 'installBundle'], 'inspect first, then the official installer');
+  const opts = calls[1][2];
+  assert.equal(calls[1][1], 'alpha@1.0.0', 'pinned spec');
+  assert.equal(opts.enabled, false, 'installed disabled, like the official page');
+  assert.equal(opts.registry, 'https://registry.npmjs.org/', 'install from the registry inspect answered from');
+  assert.equal(typeof opts.requestId, 'string');
+  assert.equal(opts.approvedBuilds, undefined, 'never pre-approves scripts');
+  assert.match(drawer.querySelector('.scx-inst').textContent, /已安装，尚未启用/);
+  assert.equal(find(drawer, 'button', /^安装$/), undefined);
+  await act(async () => find(drawer, 'button', /^启用$/).click());
+  await flush();
+  assert.deepEqual(calls.at(-1), ['setBundleEnabled', 'alpha', true]);
+  assert.match(drawer.querySelector('.scx-inst').textContent, /已启用/);
+  await v.close();
+  ctx.dispose();
+});
+
+test('risky plugin needs a second click; blocked install scripts are shown and only approved on explicit double click', async () => {
+  const { pm, remote, calls } = fakeManager([
+    () => ({ ok: true, value: { changed: false, application: 'failed', stage: 'install', target: 'github:x/evil', pendingBuilds: ['esbuild', 'evil'], packageResult: { exitCode: 1, output: '', truncated: false, logPath: '/p/.plugin-manager/logs/1.log', kind: 'build-blocked' } } }),
+    () => ({ ok: true, value: { changed: false, application: 'failed', stage: 'install', target: 'github:x/evil', error: { code: 'incompatible-version', incompatible: [{ name: 'evil', version: '0.1.0', runtimeVersion: '0.2.0-rc.2', peers: { '@deepseek-ai/dsh': '^0.1.0' } }] } } }),
+  ]);
+  const ctx = mockContext({ remote, 'remote.pluginManager': pm, layout: { selectPanel() {} } });
+  client.apply(ctx);
+  const { v, drawer } = await openDrawer(ctx, 1);
+  await act(async () => find(drawer, 'button', /^安装$/).click());
+  await flush();
+  assert.deepEqual(calls, [], 'first click on a risky plugin only arms');
+  await act(async () => find(drawer, 'button', /再点一次确认安装/).click());
+  await flush();
+  assert.equal(calls.filter((c) => c[0] === 'installBundle').length, 1);
+  const box = drawer.querySelector('.scx-inst');
+  assert.equal(box.dataset.phase, 'failed');
+  assert.match(box.textContent, /esbuild、evil/);
+  assert.match(box.textContent, /1\.log/);
+  await act(async () => find(drawer, 'button', /^允许这些脚本并重试$/).click());
+  await flush();
+  assert.equal(calls.filter((c) => c[0] === 'installBundle').length, 1, 'approval needs a second click too');
+  await act(async () => find(drawer, 'button', /再点一次：允许这些脚本并重试/).click());
+  await flush();
+  const retry = calls.filter((c) => c[0] === 'installBundle')[1][2];
+  assert.deepEqual(retry.approvedBuilds, ['esbuild', 'evil']);
+  assert.match(drawer.querySelector('.scx-inst').textContent, /不兼容：evil@0\.1\.0 要求 @deepseek-ai\/dsh \^0\.1\.0，当前运行时 0\.2\.0-rc\.2/);
+  await v.close();
+  ctx.dispose();
+});
+
+test('install can be cancelled through official cancelInstall; lost reply falls back to waitForInstall', async () => {
+  let finish;
+  const { pm, remote, calls } = fakeManager([(spec, o) => new Promise((r) => { finish = () => r({ ok: false, error: { message: 'connection reset' } }); void o; })]);
+  pm.waitForInstall = async (id) => { calls.push(['waitForInstall', id]); return { ok: true, value: { changed: false, application: 'cancelled', stage: 'install', target: 'alpha@1.0.0' } }; };
+  const ctx = mockContext({ remote, 'remote.pluginManager': pm, layout: { selectPanel() {} } });
+  client.apply(ctx);
+  const { v, drawer } = await openDrawer(ctx, 0);
+  await act(async () => find(drawer, 'button', /^安装$/).click());
+  await flush();
+  assert.match(drawer.querySelector('.scx-inst').textContent, /pnpm/, 'official install-state is reflected');
+  assert.match(drawer.textContent, /Progress: resolved 12/, 'last install-log line shown');
+  await act(async () => find(drawer, 'button', /取消安装/).click());
+  await flush();
+  const id = calls.find((c) => c[0] === 'installBundle')[2].requestId;
+  assert.deepEqual(calls.find((c) => c[0] === 'cancelInstall'), ['cancelInstall', id]);
+  await act(async () => finish());
+  await flush();
+  assert.deepEqual(calls.at(-1), ['waitForInstall', id]);
+  assert.match(drawer.querySelector('.scx-inst').textContent, /已取消/);
   await v.close();
   ctx.dispose();
 });

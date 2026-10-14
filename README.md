@@ -2,7 +2,12 @@
 
 在 DeepSeek Harness 里发现并核验 GitHub `topic:dsh-plugin` 上的插件：按用途分类、按可信度排序、套用官方的 peer 兼容规则。目标桌面版本为 **0.2.0-rc.2**。
 
-**只核验，不安装。** 安装、卸载、启用和版本豁免都交给官方「插件」页。本插件不调用 `install` / `removeBundle` / `setBundleEnabled`，测试中这三者一被调用就会失败。
+**一键安装，走官方安装器。** 抽屉里的「安装」与官方「添加插件」走同一条路径：先 `inspect` 预检，再 `installBundle(spec, {enabled:false, requestId, registry})`。插件**装好后默认不启用**，「启用」是单独一次点击（`setBundleEnabled`）。
+
+- 有安装钩子或 peer 不覆盖当前版本的插件，「安装」要点两次才执行。
+- 依赖的构建脚本被官方安装器拦下时（`pendingBuilds`），会逐个列出；双击「允许并重装」后才带 `approvedBuilds` 重装。
+- 安装中可「取消安装」（`cancelInstall`，同一 `requestId`）；回复丢失时用 `waitForInstall` 取回结果。失败时官方安装器自动回滚 `package.json` 和锁文件。
+- **卸载、版本豁免仍只在官方「插件」页做**：本插件不调用 `removeBundle`，测试中一调用就失败。没有官方 pluginManager 时不显示「安装」按钮，退回「复制锁定规格 + 去插件页添加」。
 
 ## 数据来源（只用一手来源）
 
@@ -11,6 +16,7 @@
 | GitHub GraphQL `search(topic:dsh-plugin)` | 仓库元数据、根 `package.json`、`cordis.patch.yml` 的文本（不求值） |
 | `registry.npmjs.org/<name>/latest` | 实际会被安装的清单：peer、安装钩子、`repository`、provenance |
 | 官方 `pluginManager.listBundles` / `inspect` | 已安装状态；添加前的官方预检（只解析，不执行代码） |
+| 官方 `pluginManager.installBundle` / `waitForInstall` / `cancelInstall` / `setBundleEnabled` | 一键安装（默认不启用）、取消、单独启用；进度来自 `plugin-manager/install-state` 与 `install-log` 事件 |
 
 不使用任何第三方插件市场或聚合站。
 

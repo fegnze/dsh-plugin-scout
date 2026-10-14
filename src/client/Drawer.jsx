@@ -20,10 +20,13 @@ export function Drawer({ repoKey, face, labels, runtime, installed, onClose, say
   const [err, setErr] = useState(null);
   const [inspect, setInspect] = useState(null);
   const [armed, setArmed] = useState(false);
+  const [armInstall, setArmInstall] = useState(false);
+  const [armBuilds, setArmBuilds] = useState(false);
+  const ins = face.useInstall?.(d?.name);
 
   useEffect(() => {
     let live = true;
-    setD(null); setErr(null); setInspect(null); setArmed(false);
+    setD(null); setErr(null); setInspect(null); setArmed(false); setArmInstall(false); setArmBuilds(false);
     api.detail(repoKey).then((v) => { if (live) setD(v); }, (e) => { if (live) setErr(e.message); });
     return () => { live = false; };
   }, [repoKey]);
@@ -44,6 +47,21 @@ export function Drawer({ repoKey, face, labels, runtime, installed, onClose, say
     setArmed(false);
     try { await navigator.clipboard.writeText(d.spec); say(`已复制 ${d.spec}`); } catch { say('剪贴板不可用，请手动选中规格复制'); }
   };
+
+  // 一键安装：经官方 installBundle，装好不自动启用；有 ✕ 项或不兼容时要点两次。
+  const needsConfirm = d && (d.risky || d.compat === 'incompatible');
+  const install = async () => {
+    if (needsConfirm && !armInstall) { setArmInstall(true); say(d.risky ? '存在 ✕ 级核验项，先看清单；再点一次确认安装' : '与当前 DSH 版本不兼容，官方大概率会拒装；再点一次仍然尝试'); return; }
+    setArmInstall(false);
+    await face.installer.install(d.name, d.spec);
+  };
+  const allowBuilds = async () => {
+    if (!armBuilds) { setArmBuilds(true); return; }
+    setArmBuilds(false);
+    await face.installer.install(d.name, d.spec, ins.pendingBuilds);
+  };
+  const working = ins && ['checking', 'starting', 'installing', 'cancelling', 'applying', 'enabling'].includes(ins.phase);
+  const isInstalled = d && (installed.has(d.name) || ins?.phase === 'installed' || ins?.phase === 'enabled');
 
   const open = () => {
     const how = face.openPlugins(installed.has(d?.name) ? d.name : undefined);
@@ -112,16 +130,35 @@ export function Drawer({ repoKey, face, labels, runtime, installed, onClose, say
                   : inspect?.pending ? <span style={{ color: 'var(--scx-ink3)' }}>查询中…</span>
                     : it ? <div className="scx-note" data-tone={it.tone === 'bad' ? 'bad' : undefined} style={{ color: it.tone === 'ok' ? 'var(--scx-ok)' : undefined }}>{it.text}</div>
                       : <button type="button" className="scx-btn" onClick={runInspect}>预检 {d.spec}</button>}
-                <div className="scx-ev" style={{ marginTop: 6 }}>兼容性由官方安装器在 pnpm 运行前按 peer 规则再判一次；不兼容会被拒装，可在官方页按版本豁免。</div>
+                <div className="scx-ev" style={{ marginTop: 6 }}>「安装」走官方安装器：pnpm 运行前按 peer 规则判兼容（不兼容即拒装），依赖带安装脚本会先拦下等你确认，失败自动回滚。装好默认不启用，确认无误再点「启用」。</div>
               </div>
             </>
           ) : null}
         </div>
+        {d && ins ? (
+          <div className="scx-inst" data-phase={ins.phase} aria-live="polite">
+            <div className="scx-inst-t">{ins.text}</div>
+            {working && ins.log ? <div className="scx-ev">{ins.log}</div> : null}
+            {ins.phase === 'failed' && ins.pendingBuilds?.length ? (
+              <div style={{ marginTop: 6 }}>
+                <div className="scx-ev">这些依赖要在安装时以你的用户权限执行脚本：{ins.pendingBuilds.join('、')}。允许后官方会按包名记入当前 profile。</div>
+                <button type="button" className="scx-btn" data-tone="bad" style={{ marginTop: 6 }} onClick={allowBuilds}>{armBuilds ? '再点一次：允许这些脚本并重试' : '允许这些脚本并重试'}</button>
+              </div>
+            ) : null}
+            {ins.logPath && ins.phase === 'failed' ? <div className="scx-ev">日志：{ins.logPath}</div> : null}
+          </div>
+        ) : null}
         {d ? (
           <div className="scx-df">
             <div className="scx-spec" title={d.spec}>{d.spec}</div>
             <button type="button" className="scx-btn" data-tone={d.risky ? 'bad' : undefined} onClick={copy}>{d.risky ? (armed ? '再点一次确认复制' : '了解风险后复制') : '复制锁定规格'}</button>
-            <button type="button" className="scx-btn" data-tone="pri" onClick={open}>{installed.has(d.name) ? '在插件页打开' : '去插件页添加'}</button>
+            {face.installer && !isInstalled ? (
+              working
+                ? <button type="button" className="scx-btn" onClick={() => face.installer.cancel(d.name)} disabled={ins.phase === 'applying' || ins.phase === 'cancelling' || ins.phase === 'enabling'}>取消安装</button>
+                : <button type="button" className="scx-btn" data-tone={needsConfirm ? 'bad' : 'pri'} onClick={install}>{armInstall ? '再点一次确认安装' : ins?.phase === 'failed' ? '重试安装' : '安装'}</button>
+            ) : null}
+            {face.installer && ins?.phase === 'installed' && !ins.restartRequired ? <button type="button" className="scx-btn" data-tone="pri" onClick={() => face.installer.enable(d.name)}>启用</button> : null}
+            <button type="button" className="scx-btn" data-tone={face.installer && !isInstalled ? undefined : 'pri'} onClick={open}>{isInstalled ? '在插件页打开' : '去插件页添加'}</button>
           </div>
         ) : null}
       </aside>

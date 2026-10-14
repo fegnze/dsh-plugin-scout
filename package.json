@@ -2,7 +2,7 @@
   "name": "dsh-plugin-scout",
   "version": "0.1.0",
   "private": true,
-  "description": "发现与核验 GitHub topic:dsh-plugin 上的 DSH 插件：用途分类、可信度、官方 peer 兼容规则；只核验，不安装",
+  "description": "发现与核验 GitHub topic:dsh-plugin 上的 DSH 插件：用途分类、可信度、官方 peer 兼容规则；经官方安装器一键安装（默认不启用）",
   "type": "module",
   "main": "./lib/host.js",
   "exports": {

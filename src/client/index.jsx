@@ -1,10 +1,13 @@
 // DSH Plugin Scout — Client 半边。
 // 接缝只用公开扩展点：sidebar.panellist + main（发现页），plugins.detail.badge / plugins.detail.section（官方插件页），
-// 以及只读的 remote.pluginManager（listBundles / inspect）。不调用 install / remove / setEnabled。
+// 以及官方 remote.pluginManager：listBundles / inspect（只读），installBundle（enabled:false）/ setBundleEnabled(true) / cancelInstall
+// 用于抽屉里的一键安装——与官方「添加插件」同一条路径，兼容拒装、脚本拦截、失败回滚都由官方负责。
+// 不调用 removeBundle、不写版本豁免、不碰 pnpm 与 profile 文件。
 import React, { useSyncExternalStore } from 'react';
 import { ScoutPage } from './Page.jsx';
 import { Checklist } from './Drawer.jsx';
 import { createBadgeCache } from './api.js';
+import { createInstaller } from './installer.js';
 import { band } from './view.js';
 import css from './style.css';
 
@@ -55,10 +58,13 @@ export function createInstalledStore(ctx) {
     load,
     get: () => names,
     subscribe: (l) => { listeners.add(l); if (listeners.size === 1) void load(); return () => listeners.delete(l); },
-    watch() {
+    watch(extra = {}) {
       const got = pluginManagerOf(ctx);
       const offs = [];
       try { const off = got?.remote?.$on?.('plugin-manager/changed', load); if (typeof off === 'function') offs.push(off); } catch { /* optional */ }
+      for (const [event, fn] of Object.entries(extra)) {
+        try { const off = got?.remote?.$on?.(event, fn); if (typeof off === 'function') offs.push(off); } catch { /* optional */ }
+      }
       try { const off = ctx.on?.('connection/reset', load); if (typeof off === 'function') offs.push(off); } catch { /* optional */ }
       return () => offs.forEach((o) => o());
     },
@@ -97,13 +103,21 @@ export function apply(ctx) {
   ctx.effect(installStyle, 'scout: stylesheet');
 
   const installed = createInstalledStore(ctx);
+  const installer = createInstaller(() => pluginManagerOf(ctx), { onInstalled: () => void installed.load() });
   // 可选能力绝不能拖垮激活：watch 失败只降级，不抛出到 fiber。
-  ctx.effect(() => { try { return installed.watch(); } catch { return undefined; } }, 'scout: installed watch');
+  ctx.effect(() => {
+    try {
+      return installed.watch({ 'plugin-manager/install-state': (p) => installer.onState(p), 'plugin-manager/install-log': (c) => installer.onLog(c) });
+    } catch { return undefined; }
+  }, 'scout: installed watch');
   const badges = createBadgeCache();
   let pending;
 
   const face = {
     useInstalled: () => useSyncExternalStore(installed.subscribe, installed.get, installed.get),
+    /** 一键安装：拿不到官方 installBundle 时为 undefined，界面退回「复制 + 去插件页」。 */
+    installer: (() => { const got = pluginManagerOf(ctx); return got && typeof got.pm.installBundle === 'function' ? installer : undefined; })(),
+    useInstall: (name) => useSyncExternalStore(installer.subscribe, () => installer.get()[name], () => undefined),
     inspect: pluginManagerOf(ctx) ? async (spec) => {
       try {
         const got = pluginManagerOf(ctx);

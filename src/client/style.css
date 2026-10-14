@@ -119,6 +119,10 @@ body[data-ds-dark-theme] .scx-root {
 .scx-parts b { border-top: 1px solid var(--scx-hair); padding-top: 3px; }
 .scx-df { border-top: 1px solid var(--scx-hair); padding: 12px 20px; display: flex; gap: 8px; align-items: center; }
 .scx-spec { flex: 1; min-width: 0; font-family: var(--scx-mono); font-size: 12px; border: 1px solid var(--scx-hair2); border-radius: 7px; padding: 5px 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scx-inst { border-top: 1px solid var(--scx-hair); padding: 10px 20px; font-size: 12px; color: var(--scx-ink2); }
+.scx-inst[data-phase="failed"], .scx-inst[data-phase="unconfirmed"] { color: var(--scx-bad); }
+.scx-inst[data-phase="installed"], .scx-inst[data-phase="enabled"] { color: var(--scx-ok); }
+.scx-inst-t { font-weight: 500; }
 .scx-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--scx-ink1); color: var(--scx-sheet); padding: 7px 14px; border-radius: 8px; font-size: 12px; z-index: 60; }
 
 /* ── official plugin page contributions ── */
