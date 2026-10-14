@@ -1,5 +1,6 @@
-# dsh bundle layer: mount DSH Plugin Scout (host routes + browser half).
-# Read-only by design: discovery and verification only; installing stays with the official Plugins page.
+# Bundle layer for DSH Plugin Scout: mounts the host routes and the browser half.
+# Installing goes through the official pluginManager (installBundle, disabled by
+# default); uninstalling and version exemptions stay on the official Plugins page.
 - insert:
     - id: dsh-plugin-scout
       name: 'dsh-plugin-scout'

@@ -1,6 +1,21 @@
 # DSH Plugin Scout · 发现插件
 
-在 DeepSeek Harness 里发现并核验 GitHub `topic:dsh-plugin` 上的插件：按用途分类、按可信度排序、套用官方的 peer 兼容规则。目标桌面版本为 **0.2.0-rc.2**。
+[![ci](https://github.com/fegnze/dsh-plugin-scout/actions/workflows/ci.yml/badge.svg)](https://github.com/fegnze/dsh-plugin-scout/actions/workflows/ci.yml) · MIT
+
+在 DeepSeek Harness 里发现并核验 GitHub `topic:dsh-plugin` 上的插件：按用途分类、按可信度排序、套用官方的 peer 兼容规则。适用 DSH **0.2.x**（`>=0.2.0-rc.2 <0.3.0`），实测版本为桌面版 0.2.0-rc.2。
+
+## 安装
+
+官方「插件」页 → 添加插件，填入以下任一规格：
+
+| 规格 | 说明 |
+| --- | --- |
+| `dsh-plugin-scout` | 推荐。npm 预构建产物带 provenance，无安装脚本，不需要批准构建 |
+| 下载 Release 里的 `dsh-plugin-scout-<版本>.tgz`，填它的绝对路径 | 不经 npm 注册表 |
+
+命令行：`dsh plugin --profile <profile> add dsh-plugin-scout`。装好后在插件页启用，侧栏会出现「发现插件」。
+
+不要用 `github:fegnze/dsh-plugin-scout` 安装：git 安装拿到的是源码，没有 `lib/`，本仓库也不提供 `prepare` 脚本。
 
 **一键安装，走官方安装器。** 抽屉里的「安装」与官方「添加插件」走同一条路径：先 `inspect` 预检，再 `installBundle(spec, {enabled:false, requestId, registry})`。插件**装好后默认不启用**，「启用」是单独一次点击（`setBundleEnabled`）。
 
@@ -62,14 +77,14 @@
   - **在插件页打开 / 去插件页添加**：已安装的通过官方 `pluginNavigation.openBundle` 直达详情；未安装的切到官方插件页，粘贴规格即可添加。
 - **官方插件页**：`plugins.detail.badge`（可信度分数）、`plugins.detail.section`（核验清单，以及「在发现页查看 →」）。索引里没有的包返回 `null`，不占位。
 
-## 安装
+## 开发
 
 ```sh
 npm install --ignore-scripts
-npm test          # 先构建 lib/，再跑 core / host / client 三组测试
+npm test          # 先构建 lib/，再跑 core / host / client / manifest 四组测试
 ```
 
-在 **desktop profile** 的插件页添加本目录的绝对路径（link 安装，源目录不能移动）。Host 侧有改动时需要完整重启 App；只改了 Client 时刷新窗口即可。
+本地调试：在插件页添加本目录的绝对路径（link 安装，源目录不能移动）。Host 侧有改动时需要完整重启 App；只改了 Client 时刷新窗口即可。
 
 **GitHub token** 依次从这些地方取：环境变量 `DSH_SCOUT_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`，或通过 DSH subprocess 服务执行 `gh auth token`。token 只在本进程内存里使用，不落盘、不回传给前端。没有 token 时页面会提示执行 `gh auth login`。
 
@@ -94,3 +109,23 @@ npm test          # 先构建 lib/，再跑 core / host / client 三组测试
 - `test/`：`core`（真实 GraphQL 页、41 个标注样本）、`host`（假 fetch 端到端刷新、路由鉴权）、`client`（Happy DOM 加载构建产物）。
 
 升级 DSH 后，先核对官方插件页的 Slot 名、`pluginManager` 方法和 `dsh-app-boot` 导出，再重新验收。
+
+## 对齐的官方约定
+
+依据官方仓库的 `docs/user/develop/basic/publish`、`docs/cookbook/adding-a-package` §5 和 `@deepseek-ai/dsh-package-manifest` 类型；`test/manifest.test.mjs` 逐条断言。
+
+| 约定 | 本包 |
+| --- | --- |
+| 组合包：`dsh.bundle.patch`，patch 行按**包名**引用 | `./cordis.patch.yml` → `name: 'dsh-plugin-scout'` |
+| `dsh` 下只放公共作者字段 | `manifestVersion: 1`、`bundle`、`client`（`platform: web`） |
+| 展示元信息：`locale/en.json` 为入口，其他语言同字段；导出 `./locale/*.json`、`./package.json` 并发布 | `en.json` / `zh.json` 的 `meta.title`、`meta.description` |
+| 图标：包内相对路径，≤256 KiB，自包含 | `./icon.svg` |
+| 需要与宿主共享实例的包写进 peer；版本门禁只看 `@deepseek-ai/dsh*` peer | `@deepseek-ai/cordis ~4.0.4`；`@deepseek-ai/dsh-app-boot >=0.2.0-rc.2 <0.3.0`（optional，作为官方门禁的版本声明） |
+| `engines.dsh` 只是声明 | `>=0.2.0-rc.2 <0.3.0` |
+| 发预构建产物，不让用户批准构建 | npm `--provenance` 发布，无 `prepare` 及其他安装钩子 |
+
+## 发布
+
+1. 改 `package.json` 的 `version`，提交。
+2. `git tag v<version> && git push --tags`。`release` 工作流会跑测试，执行 `npm publish --provenance`，并把同一个 tgz 挂到 GitHub Release。仓库需要配置 secret `NPM_TOKEN`（npm 的 Automation token）。
+3. 仓库保持 public，并带 topic `dsh-plugin`，这样才会出现在 https://github.com/topics/dsh-plugin，也能被 Scout 自己收录。
