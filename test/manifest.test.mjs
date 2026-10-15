@@ -53,14 +53,14 @@ test('peers: every DSH peer is a valid range covering the target runtime and mir
   assert.ok(semver.satisfies(runtime, pkg.engines.dsh, { includePrerelease: true }), 'engines.dsh covers the target runtime');
 });
 
-test('docs: English README.md and README.zh.md link to each other, both shipped', async () => {
+test('docs: English README.md and docs/zh.md link to each other, both shipped', async () => {
   const en = await read('README.md');
-  const zh = await read('README.zh.md');
-  assert.match(en, /\[中文\]\(README\.zh\.md\)/);
-  assert.match(zh, /\[English\]\(README\.md\)/);
+  const zh = await read('docs/zh.md');
+  assert.match(en, /\[中文\]\(docs\/zh\.md\)/);
+  assert.match(zh, /\[English\]\(\.\.\/README\.md\)/);
   assert.doesNotMatch(en.replace(/`[^`]*`|\*\*[^*]*\*\*|\[中文\]/g, ''), /[\u4e00-\u9fff]{4,}/, 'README.md stays English (UI labels only in code or bold)');
   assert.equal((en.match(/^## /gm) || []).length, (zh.match(/^## /gm) || []).length, 'same section count');
-  assert.ok(pkg.files.includes('README.zh.md'));
+  assert.ok(pkg.files.includes('docs/zh.md'));
 });
 
 test('distribution: prebuilt lib only, no install hooks, repository points at the GitHub repo', () => {
