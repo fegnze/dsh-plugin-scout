@@ -1,6 +1,6 @@
 # DSH Plugin Scout
 
-[English](README.md) | [中文](README.zh.md)
+[English](README.md) | [中文](docs/zh.md)
 
 [![ci](https://github.com/fegnze/dsh-plugin-scout/actions/workflows/ci.yml/badge.svg)](https://github.com/fegnze/dsh-plugin-scout/actions/workflows/ci.yml) · MIT
 
