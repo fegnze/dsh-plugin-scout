@@ -1,11 +1,27 @@
-<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-<defs>
-<linearGradient id="scout-g" x1="7" y1="7" x2="29" y2="29" gradientUnits="userSpaceOnUse">
-<stop stop-color="#58BCC8"/>
-<stop offset="0.55" stop-color="#658EFF"/>
-</linearGradient>
-</defs>
-<circle cx="16" cy="16" r="8.2" stroke="url(#scout-g)" stroke-width="2.2"/>
-<path d="M22.2 22.2L28.4 28.4" stroke="url(#scout-g)" stroke-width="2.6" stroke-linecap="round"/>
-<path d="M13.2 12.6h5.6v2.1a1.3 1.3 0 1 1 0 2.6v2.1h-5.6v-2.1a1.3 1.3 0 1 0 0-2.6z" fill="url(#scout-g)"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="body" x1="44" y1="42" x2="210" y2="219" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00E6FA"/><stop offset=".35" stop-color="#3EB5FA"/><stop offset=".63" stop-color="#A8A1F5"/><stop offset=".84" stop-color="#F1CCF9"/><stop offset="1" stop-color="#FFF6FF"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="46" y1="40" x2="203" y2="214" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A0FFFF"/><stop offset=".43" stop-color="#6DAFFF"/><stop offset="1" stop-color="#FFF3FF"/>
+    </linearGradient>
+    <linearGradient id="needle" x1="100" y1="84" x2="161" y2="172" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6DF7FF"/><stop offset=".42" stop-color="#96C0FF"/><stop offset=".72" stop-color="#E6CCFF"/><stop offset="1" stop-color="#FFF7FF"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0" cy="0" r="1" gradientTransform="translate(185 174) rotate(43) scale(80 42)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".7"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="15" y="15" width="226" height="226" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
+    <path id="ring" fill-rule="evenodd" d="M128 29C183 29 227 73 227 128C227 183 183 227 128 227C73 227 29 183 29 128C29 73 73 29 128 29ZM128 65C93 65 65 93 65 128C65 163 93 191 128 191C163 191 191 163 191 128C191 93 163 65 128 65Z"/>
+  </defs>
+  <use href="#ring" fill="url(#body)" opacity=".3" filter="url(#glow)"/>
+  <use href="#ring" fill="url(#body)" stroke="url(#edge)" stroke-width="2"/>
+  <use href="#ring" fill="url(#sheen)"/>
+  <path d="M164 83C171 80 177 86 174 93L150 144C149 147 147 149 144 150L93 174C86 177 80 171 83 164L107 113C108 110 110 108 113 107Z" fill="url(#needle)" stroke="url(#edge)" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M164 88L139 133L113 113Z" fill="#F5F3FF" fill-opacity=".65"/>
+  <path d="M42 112C49 69 80 42 120 39" stroke="#A9FFFF" stroke-opacity=".7" stroke-width="4" stroke-linecap="round"/>
+  <path d="M146 215C180 210 207 183 215 151" stroke="#FFF9FF" stroke-opacity=".7" stroke-width="4" stroke-linecap="round"/>
 </svg>
