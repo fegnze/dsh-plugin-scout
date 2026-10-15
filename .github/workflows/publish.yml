@@ -1,0 +1,51 @@
+name: Publish to npm
+
+# Configure npm Trusted Publisher for this repository and publish.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full commit SHA approved for publication
+        required: true
+        type: string
+      dry_run:
+        description: Validate and preview the package without publishing
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify approved commit
+        run: test "$GITHUB_SHA" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Pin npm
+        run: npm install --global npm@11.11.0 --ignore-scripts
+      - name: Install dependencies without lifecycle scripts
+        run: npm install --ignore-scripts --package-lock=false
+      # npm test runs the build through pretest.
+      - name: Test
+        run: npm test
+      - name: Preview package
+        run: npm pack --dry-run --ignore-scripts
+      - name: Publish with Trusted Publishing
+        if: inputs.dry_run == false
+        run: npm publish --access public --provenance --ignore-scripts
