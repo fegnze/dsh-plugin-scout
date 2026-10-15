@@ -1,10 +1,12 @@
 # DSH Plugin Scout · 发现插件
 
-[English](README.md) | 中文
+[English](README.md) | [中文](README.zh.md)
 
 [![ci](https://github.com/fegnze/dsh-plugin-scout/actions/workflows/ci.yml/badge.svg)](https://github.com/fegnze/dsh-plugin-scout/actions/workflows/ci.yml) · MIT
 
 在 DeepSeek Harness 里发现并核验 GitHub `topic:dsh-plugin` 上的插件：按用途分类、按可信度排序、套用官方的 peer 兼容规则。适用 DSH **0.2.x**（`>=0.2.0-rc.2 <0.3.0`），实测版本为桌面版 0.2.0-rc.2。
+
+> 应用内界面目前仅有中文。官方插件页里的插件标题与描述已本地化（`locale/en.json`、`locale/zh.json`）。
 
 ## 安装
 
@@ -13,7 +15,7 @@
 | 规格 | 说明 |
 | --- | --- |
 | `dsh-plugin-scout` | 推荐。npm 预构建产物带 provenance，无安装脚本，不需要批准构建 |
-| 下载 Release 里的 `dsh-plugin-scout-<版本>.tgz`，填它的绝对路径 | 不经 npm 注册表 |
+| 若发布时提供预构建的 `dsh-plugin-scout-<版本>.tgz`，填它的绝对路径 | 不经 npm 注册表；当前 tag 工作流只创建发布说明，不附带 tarball |
 
 命令行：`dsh plugin --profile <profile> add dsh-plugin-scout`。装好后在插件页启用，侧栏会出现「发现插件」。
 
@@ -69,7 +71,7 @@
 | V10 | fork | 仅提示 |
 | — | stars：`min(5, round(log10(1+s)·2))` | ≤5 |
 
-总分截断到 0–100。任何一项为 ✕ 都记为「有风险」：复制规格要点两次，徽章上带 ✕。同名的多个仓库会折叠到同一个代表仓库下，选择顺序是：来源链一致 > 分数 > stars > 创建最早；其余仓库记为副本，默认隐藏。
+总分截断到 0–100。任何一项为 ✕ 都记为「有风险」：复制规格或安装都要点两次，徽章上带 ✕。同名的多个仓库会折叠到同一个代表仓库下，选择顺序是：来源链一致 > 分数 > stars > 创建最早；其余仓库记为副本，默认隐藏。
 
 用途分类共 10 类：界面、会话、记忆、Agent、工具、模型、安全、开发、桥接、领域。分类依据是依赖的官方包（权重最高）、topics/keywords（3 分）和文本（2 分），总分不低于 2 才归类。在 41 个人工标注样本上，第一类命中率不低于 35/41。
 
@@ -131,6 +133,8 @@ npm test          # 先构建 lib/，再跑 core / host / client / manifest 四�
 
 ## 发布
 
-1. 改 `package.json` 的 `version`，提交。
-2. `git tag v<version> && git push --tags`。`release` 工作流会跑测试，执行 `npm publish --provenance`，并把同一个 tgz 挂到 GitHub Release。npm 通过可信发布（Trusted Publishing，OIDC）认证工作流，仓库里不存 npm token，provenance 自动附带。一次性配置：npmjs.com → 包 Settings → Trusted Publisher（GitHub Actions，工作流 `release.yml`），或：`npx npm@latest trust github dsh-plugin-scout --file release.yml --repo fegnze/dsh-plugin-scout --allow-publish`。
-3. 仓库保持 public，并带 topic `dsh-plugin`，这样才会出现在 https://github.com/topics/dsh-plugin，也能被 Scout 自己收录。
+1. 在 `package.json` 中准备目标 `version`，将发布改动提交到 `main`。
+2. 从 `main` 手动触发 `publish.yml`，`expected_sha` 填已批准的完整提交 SHA。先保留默认 `dry_run: true` 做验证：工作流核对 SHA、不执行生命周期脚本地安装依赖、运行测试（含构建），并用 `npm pack --dry-run --ignore-scripts` 预览包。dry-run 不发布。正式发布获批准后，以同一个 SHA 和 `dry_run: false` 再触发，执行 `npm publish --access public --provenance --ignore-scripts`。
+3. npm 通过可信发布（Trusted Publishing，OIDC）认证，仓库里不存 npm token，provenance 自动附带。在 npmjs.com → 包 Settings → Trusted Publisher 配置本 GitHub 仓库与工作流 `publish.yml`，或执行 `npx npm@latest trust github dsh-plugin-scout --file publish.yml --repo fegnze/dsh-plugin-scout`。
+4. 独立的 `git tag v<version> && git push origin v<version>` 触发 `release.yml`：只核对 tag 与包版本一致并创建带自动生成说明的 GitHub Release，不发布 npm，也不构建或附带 tgz。如果提供 tarball 安装，需要另行提供预构建归档。
+5. 仓库保持 public，并带 topic `dsh-plugin`，这样才会出现在 https://github.com/topics/dsh-plugin，也能被 Scout 自己收录。

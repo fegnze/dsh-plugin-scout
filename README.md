@@ -1,6 +1,6 @@
 # DSH Plugin Scout
 
-English | [中文](README.zh.md)
+[English](README.md) | [中文](README.zh.md)
 
 [![ci](https://github.com/fegnze/dsh-plugin-scout/actions/workflows/ci.yml/badge.svg)](https://github.com/fegnze/dsh-plugin-scout/actions/workflows/ci.yml) · MIT
 
@@ -15,7 +15,7 @@ Open the official **Plugins** page → **Add plugin**, and enter one of:
 | Spec | Notes |
 | --- | --- |
 | `dsh-plugin-scout` | Recommended. Prebuilt npm package with provenance; no install scripts, no build approval needed |
-| Absolute path of `dsh-plugin-scout-<version>.tgz` downloaded from a GitHub Release | Bypasses the npm registry |
+| Absolute path of a prebuilt `dsh-plugin-scout-<version>.tgz`, if supplied with a release | Bypasses the npm registry; the current tag workflow creates release notes only and does not attach a tarball |
 
 From the CLI: `dsh plugin --profile <profile> add dsh-plugin-scout`. Enable it on the Plugins page; a **发现插件** (Discover plugins) entry appears in the sidebar.
 
@@ -133,6 +133,8 @@ Based on the official repository's `docs/user/develop/basic/publish`, `docs/cook
 
 ## Releasing
 
-1. Bump `version` in `package.json` and commit.
-2. `git tag v<version> && git push --tags`. The `release` workflow runs the tests, runs `npm publish --provenance`, and attaches the same tgz to a GitHub Release. npm authenticates the workflow through Trusted Publishing (OIDC), so no npm token is stored in the repository; provenance is attached automatically. One-time setup on npmjs.com → package Settings → Trusted Publisher (GitHub Actions, workflow `release.yml`), or: `npx npm@latest trust github dsh-plugin-scout --file release.yml --repo fegnze/dsh-plugin-scout --allow-publish`.
-3. Keep the repository public with the `dsh-plugin` topic so it appears on https://github.com/topics/dsh-plugin and in Scout itself.
+1. Prepare the intended `version` in `package.json` and commit the release changes to `main`.
+2. Manually dispatch `publish.yml` from `main` with `expected_sha` set to the full approved commit SHA. Keep `dry_run: true` (the default) for validation first: the workflow checks the SHA, installs dependencies without lifecycle scripts, runs tests (including the build), and previews the package with `npm pack --dry-run --ignore-scripts`. A dry run does not publish. For an approved release, dispatch the same SHA with `dry_run: false` to run `npm publish --access public --provenance --ignore-scripts`.
+3. npm authenticates through Trusted Publishing (OIDC), so no npm token is stored in the repository; provenance is attached automatically. Configure npmjs.com → package Settings → Trusted Publisher for this GitHub repository and workflow `publish.yml`, or use `npx npm@latest trust github dsh-plugin-scout --file publish.yml --repo fegnze/dsh-plugin-scout`.
+4. Separately, `git tag v<version> && git push origin v<version>` triggers `release.yml`. It checks that the tag matches the package version and creates a GitHub Release with generated notes only; it neither publishes to npm nor builds or attaches a tgz. Supply a prebuilt archive separately if offering tarball installation.
+5. Keep the repository public with the `dsh-plugin` topic so it appears on https://github.com/topics/dsh-plugin and in Scout itself.
