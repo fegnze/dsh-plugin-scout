@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-scout",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Discover and verify DeepSeek Harness plugins from GitHub topic:dsh-plugin — usage categories, trust score, official peer compatibility; one-click install through the official installer (disabled by default)",
   "icon": "./icon.svg",
   "license": "MIT",

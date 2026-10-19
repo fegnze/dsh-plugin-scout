@@ -201,6 +201,25 @@ test('crawlRepos pages every window once and keys repos by owner/name', async ()
   assert.equal(calls.length, 1);
 });
 
+test('full and incremental searches include forks in counts and pages, retaining source facts', async () => {
+  for (const since of [undefined, NOW - 86_400_000]) {
+    const queries = [];
+    const gh = {
+      async count(q) { queries.push(q); return 1; },
+      async *pages(q) {
+        queries.push(q);
+        yield [{ nameWithOwner: 'owner/fork', isFork: true, pushedAt: '2026-10-13T00:00:00Z', createdAt: '2026-10-01T00:00:00Z', pkg: { text: JSON.stringify({ name: 'fork-plugin', dsh: { bundle: {} } }) } }];
+      },
+    };
+    const records = await crawlRepos({ gh, since, now: NOW });
+    assert.ok(queries.length > 1);
+    assert.ok(queries.every(q => q.includes(' fork:true ')), 'count and page queries share the inclusive scope');
+    const fact = records.get('owner/fork');
+    assert.equal(fact.fork, true, 'fork identity remains a real source fact');
+    assert.equal(fact.pkg.name, 'fork-plugin');
+  }
+});
+
 test('windows come out newest first, so a streaming crawl shows recent repos before old ones', async () => {
   const created = Array.from({ length: 5000 }, (_, i) => Date.parse('2026-08-01T00:00:00Z') + i * 60_000);
   const gh = { async count(q) { const [a, b] = q.match(/created:(\S+)\.\.(\S+)/).slice(1).map(Date.parse); return created.filter((t) => t >= a && t <= b).length; } };

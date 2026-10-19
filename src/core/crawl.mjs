@@ -159,7 +159,7 @@ export async function* windows(gh, topic, field, from, to) {
   const stack = seedSpans(from, to);
   while (stack.length) {
     const [a, b] = stack.pop();
-    const q = `topic:${topic} ${field}:${iso(a)}..${iso(b)}`;
+    const q = `topic:${topic} fork:true ${field}:${iso(a)}..${iso(b)}`;
     const count = await gh.count(q);
     if (!count) continue;
     if (count > WINDOW_CAP && b - a > MIN_SPAN) {
@@ -192,7 +192,7 @@ export async function crawlRepos({ gh, topic = 'dsh-plugin', since, now = Date.n
   const stats = { changed: 0, unchanged: 0 };
   // 总数只用于进度分母：不等它，和切窗、翻页同时跑。
   let expected = 0;
-  const totalQ = gh.count(`topic:${topic} ${field}:${iso(from)}..${iso(now)}`).then((n) => { expected = n; report(); }, (e) => { if (e.code === 'auth') throw e; });
+  const totalQ = gh.count(`topic:${topic} fork:true ${field}:${iso(from)}..${iso(now)}`).then((n) => { expected = n; report(); }, (e) => { if (e.code === 'auth') throw e; });
   let windowsDone = 0;
   let windowsSeen = 0;
   const report = () => onProgress?.({ phase: 'github', repos: out.size, expected, windows: windowsDone, totalWindows: windowsSeen, ...stats });

@@ -39,7 +39,7 @@ The **Install** button in the details drawer takes the same path as the official
 | Official `pluginManager.listBundles` / `inspect` | Installed state; the official pre-install check (resolves only, runs no code) |
 | Official `pluginManager.installBundle` / `waitForInstall` / `cancelInstall` / `setBundleEnabled` | One-click install (disabled by default), cancel, separate enable; progress from `plugin-manager/install-state` and `install-log` events |
 
-No third-party marketplace or aggregator is used.
+No third-party marketplace or aggregator is used. Topic searches explicitly use `fork:true` to include both original repositories and forks; forks retain their source notice and undergo the same checks. After upgrading from 0.1.5 or earlier, use **Rebuild full index** once to discover older forks omitted by the previous search scope.
 
 **Crawling, measured (2026-10):** the topic holds about 19,000 repositories, 12,700 of them created in August, many of them same-name copies. GitHub search returns at most 1,000 results per query, so Scout bisects time windows adaptively (≤900 results per window, 60 s minimum window). Pages are 50 items: 100-item pages return 502 in dense windows, so on 502 the page size steps down to 25, then 10, resuming from the same cursor. Later runs crawl incrementally by `pushed`.
 

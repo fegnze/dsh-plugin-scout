@@ -39,7 +39,7 @@
 | 官方 `pluginManager.listBundles` / `inspect` | 已安装状态；添加前的官方预检（只解析，不执行代码） |
 | 官方 `pluginManager.installBundle` / `waitForInstall` / `cancelInstall` / `setBundleEnabled` | 一键安装（默认不启用）、取消、单独启用；进度来自 `plugin-manager/install-state` 与 `install-log` 事件 |
 
-不使用任何第三方插件市场或聚合站。
+不使用任何第三方插件市场或聚合站。topic 搜索显式使用 `fork:true`，同时纳入原仓库与 fork；fork 保留来源提示并接受相同核验。从 0.1.5 或更早版本升级后，须执行一次「全量重建索引」，补齐旧搜索范围遗漏、近期未推送的 fork。
 
 **抓取实测（2026-10）**：topic 下约有 1.9 万个仓库，其中 8 月集中出现 1.27 万个，大量是同名副本。GitHub 搜索单次查询最多返回 1000 条结果，所以按时间窗口自适应二分，每个窗口不超过 900 条，最小窗口 60 秒。每页 50 条：密集窗口里每页 100 条会返回 502，遇到 502 时依次降到 25、10，并从同一游标续翻。之后按 `pushed` 字段做增量抓取。
 
