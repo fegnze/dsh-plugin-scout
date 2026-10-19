@@ -21,6 +21,20 @@
 
 不要用 `github:fegnze/dsh-plugin-scout` 安装：git 安装拿到的是源码，没有 `lib/`，本仓库也不提供 `prepare` 脚本。
 
+## 原生「发现」索引
+
+在官方「插件 → 发现 → 索引源」中添加：
+
+```text
+https://fegnze.github.io/dsh-plugin-scout/index.json
+```
+
+这是 format-1 插件目录，不是把 Scout 页面嵌入原生发现页；浏览目录不需要安装 Scout。GitHub Actions 每天 UTC 03:23（北京时间 11:23）及生成器变更时重建，只有通过官方 DSH 格式验证后才部署。生成失败保留上次部署。
+
+公开目录仅包含去重后的 npm bundle：兼容目标 DSH 0.2.1-rc.2、仓库来源匹配、无安装钩子且声明 provenance。归档、有风险、仓库版本漂移、事实过期或不完整的条目不输出。fork 保留来源标签。provenance 存在不等于已完成密码学验证，也不是安全保证。每项锁定 npm 版本，发布时间来自 npm 的真实记录；最终安装仍由官方安装器判定。目标运行时只是目录发布策略，不表示兼容所有 DSH 版本。
+
+执行 `GH_TOKEN=<只读令牌> node scripts/generate-market.mjs` 从公开 GitHub/npm 数据生成。`MARKET_OUTPUT`、`SCOUT_CACHE`、`DSH_TARGET` 分别覆盖输出、可丢弃抓取缓存、目标运行时。不公开本机 profile 或用户缓存；生成的 `site/index.json` 与抓取缓存被 Git 忽略，CI 只上传公开目录作为 Pages 产物。索引源由你显式添加，Scout 不自动修改来源配置。
+
 ## 一键安装，走官方安装器
 
 抽屉里的「安装」与官方「添加插件」走同一条路径：先 `inspect` 预检，再 `installBundle(spec, {enabled:false, requestId, registry})`。插件**装好后默认不启用**，「启用」是单独一次点击（`setBundleEnabled`）。

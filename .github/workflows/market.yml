@@ -1,0 +1,58 @@
+name: market
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'src/core/**'
+      - 'scripts/generate-market.mjs'
+      - '.github/workflows/market.yml'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-pages
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - uses: actions/cache@v4
+        with:
+          path: .cache/scout
+          key: scout-market-v1-${{ github.run_id }}
+          restore-keys: scout-market-v1-
+      - name: Generate and validate official index
+        run: node scripts/generate-market.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DSH_TARGET: 0.2.1-rc.2
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy validated catalog
+        id: deployment
+        uses: actions/deploy-pages@v4

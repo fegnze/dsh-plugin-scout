@@ -21,6 +21,20 @@ From the CLI: `dsh plugin --profile <profile> add dsh-plugin-scout`. Enable it o
 
 Do not install from `github:fegnze/dsh-plugin-scout`: a git install fetches source without `lib/`, and this repository deliberately ships no `prepare` script.
 
+## Native Discover index
+
+Add this URL in the official **Plugins → Discover → Index sources** dialog:
+
+```text
+https://fegnze.github.io/dsh-plugin-scout/index.json
+```
+
+This is a format-1 catalog, not an embedded Scout page. You do not need to install Scout to browse it. GitHub Actions rebuilds it daily at 03:23 UTC and on generator changes, then deploys only after the official DSH validator accepts the document. Failed generation leaves the previous deployment intact.
+
+The public catalog contains deduplicated npm bundles compatible with the target DSH 0.2.1-rc.2, with a matching repository, no install hooks, and advertised provenance. Archived, risky, version-drifted, stale or incomplete entries are excluded. Forks retain a source label. Provenance presence is not cryptographic verification or a security guarantee. Each entry pins the npm version and uses npm's real release time; the official installer remains the final authority. The target runtime is a publishing policy, not a compatibility claim for every DSH release.
+
+Generate from public GitHub/npm data with `GH_TOKEN=<read-only-token> node scripts/generate-market.mjs`. `MARKET_OUTPUT`, `SCOUT_CACHE`, and `DSH_TARGET` override the output, disposable crawl cache, and target runtime. No local profile or user cache is published. The generated `site/index.json` and crawl cache are ignored by Git; CI uploads only the public catalog as the Pages artifact. Adding the source remains your explicit action; Scout does not alter configured index sources.
+
 ## One-click install, through the official installer
 
 The **Install** button in the details drawer takes the same path as the official **Add plugin**: `inspect` first, then `installBundle(spec, {enabled: false, requestId, registry})`. Installed plugins start **disabled**; **Enable** is a separate click (`setBundleEnabled`).
