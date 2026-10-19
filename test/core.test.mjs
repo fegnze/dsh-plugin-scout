@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { classify, has } from '../src/core/classify.mjs';
 import { compatibility, evaluate, githubSlug, installSpec, markShadows, patchInserts } from '../src/core/verify.mjs';
-import { normalizeNode, slimManifest, windows, crawlRepos, createGithub, poolIter } from '../src/core/crawl.mjs';
+import { canonicalGithubSlug, normalizeNode, slimManifest, windows, crawlRepos, createGithub, poolIter } from '../src/core/crawl.mjs';
 import { createRecordSet, deriveRecords, emptyIndex, facets, factOf, query } from '../src/core/store.mjs';
 
 const RT = '0.2.0-rc.2';
@@ -44,6 +44,33 @@ test('repository slug normalisation', () => {
   assert.equal(githubSlug('github:a/b'), 'a/b');
   assert.equal(githubSlug('a/b'), 'a/b');
   assert.equal(githubSlug('https://gitlab.com/a/b'), undefined);
+});
+
+test('canonical repository hints are strict GitHub slugs, never arbitrary URLs', () => {
+  for (const raw of ['github:A/B', 'A/B', 'git+https://github.com/A/B.git', 'git@github.com:A/B.git', 'ssh://git@github.com/A/B.git']) {
+    assert.equal(canonicalGithubSlug({ url: raw }), 'a/b');
+  }
+  for (const raw of ['https://evilgithub.com/a/b', 'https://github.com.evil/a/b', 'https://evil/github.com/a/b', 'https://user@github.com/a/b', 'https://github.com/a/b/tree/main', 'github:a/..', 'a/b?x', 'a/b\nquery {}']) {
+    assert.equal(canonicalGithubSlug(raw), undefined, raw);
+  }
+});
+
+test('canonical GraphQL reads exact repository fields and fails closed on partial errors or redirects', async () => {
+  const calls = [];
+  const make = (body) => createGithub({ token: 't', fetch: async (url, init) => {
+    calls.push({ url, ...JSON.parse(init.body) });
+    return { status: 200, json: async () => body };
+  } });
+  const repository = { nameWithOwner: 'A/B', pkg: { text: JSON.stringify({ name: 'actual', version: '2.0.0' }) } };
+  const fact = await make({ data: { repository } }).byRepo('a/b');
+  assert.equal(fact.pkg.name, 'actual');
+  assert.deepEqual(calls[0].variables, { owner: 'a', name: 'b' });
+  assert.match(calls[0].query, /repository\(owner:\$owner,name:\$name\)/);
+  assert.match(calls[0].query, /HEAD:package.json/);
+  assert.doesNotMatch(calls[0].query, /mutation|search\(/);
+  assert.equal(await make({ data: { repository: null } }).byRepo('a/b'), undefined);
+  assert.equal(await make({ data: { repository: { ...repository, nameWithOwner: 'else/b' } } }).byRepo('a/b'), undefined);
+  await assert.rejects(() => make({ data: { repository }, errors: [{ message: 'blob denied' }] }).byRepo('a/b'), { code: 'graphql' });
 });
 
 test('patch inserts are extracted as text, YAML tags are never evaluated', () => {

@@ -34,6 +34,29 @@ function fakeFetch(nodes, npm = {}) {
   return { fetch, calls };
 }
 
+function canonicalFetch(nodes, npm, canonical) {
+  const base = fakeFetch(nodes, npm);
+  const calls = [];
+  let live = 0; let peak = 0;
+  const fetch = async (url, init) => {
+    if (init?.body) {
+      const { variables } = JSON.parse(init.body);
+      if (variables.owner) {
+        const key = `${variables.owner}/${variables.name}`;
+        calls.push(key);
+        live++; peak = Math.max(peak, live);
+        try {
+          const repository = await canonical(key);
+          return { status: 200, json: async () => ({ data: { repository } }) };
+        } finally { live--; }
+      }
+      if (variables.ids) return { status: 200, json: async () => ({ data: { nodes: variables.ids.map((id) => nodes.find((n) => n.id === id)) } }) };
+    }
+    return base.fetch(url, init);
+  };
+  return { fetch, calls, npmCalls: base.calls.npm, peak: () => peak };
+}
+
 async function tmp() { return mkdtemp(join(tmpdir(), 'scout-')); }
 
 async function settle(scout) { for (let i = 0; i < 200 && scout.status().running; i++) await new Promise((r) => setTimeout(r, 5)); }
@@ -81,6 +104,82 @@ test('refresh: full crawl writes a facts-only index, npm looked up for plugins o
     await settle(inc);
     assert.equal(inc.status().kind, 'incremental');
     assert.ok(seen.every((q) => /pushed:/.test(q)), seen[0]);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('full refresh supplements npm canonical source without topic, preserves GitHub facts and badge representative', async () => {
+  const dir = await tmp();
+  try {
+    const npm = { alpha: JSON.parse(pkg('alpha', { version: '9.0.0', repository: 'git+https://github.com/real/source.git' })) };
+    const source = node('real', 'source', pkg('alpha', { version: '2.0.0' }), { repositoryTopics: { nodes: [] }, stargazerCount: 1 });
+    const fake = canonicalFetch([node('third', 'copy', pkg('alpha'), { stargazerCount: 999 })], npm, async () => source);
+    const scout = createScout({ file: join(dir, 'i.json'), runtime: RT, fetch: fake.fetch, now: () => T0, getToken: async () => ({ token: 't' }) });
+    scout.refresh('full'); await settle(scout);
+    assert.equal(scout.status().error, null);
+    assert.deepEqual(fake.calls, ['real/source']);
+    assert.equal(scout.badges(['alpha']).alpha.repo, 'real/source');
+    assert.equal(scout.badges(['alpha']).alpha.chain, 'match');
+    assert.equal(scout.index.repos['real/source'].pkg.version, '2.0.0', 'never copy npm manifest into GitHub facts');
+    assert.deepEqual(scout.index.repos['real/source'].topics, []);
+    assert.equal(scout.detail('third/copy').shadowOf, 'real/source');
+    // 缓存 npm 仍可补链；full 不能因缺 topic 删除 canonical。
+    scout.refresh('full'); await settle(scout);
+    assert.equal(scout.status().error, null);
+    assert.equal(scout.index.repos['real/source'].pkg.version, '2.0.0');
+    assert.equal(fake.calls.length, 2);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('canonical failures and wrong package names do not invent facts or prune referenced cached source', async () => {
+  const dir = await tmp();
+  try {
+    for (const mode of ['null', 'wrong', 'error', 'invalid']) {
+      const m = JSON.parse(pkg('alpha', { repository: mode === 'invalid' ? 'https://evilgithub.com/real/source' : 'github:real/source' }));
+      const fake = canonicalFetch([node('third', 'copy', pkg('alpha'))], { alpha: m }, async () => {
+        if (mode === 'error') throw new Error('network failed');
+        return mode === 'wrong' ? node('real', 'source', pkg('different')) : null;
+      });
+      const scout = createScout({ file: join(dir, `${mode}.json`), runtime: RT, fetch: fake.fetch, now: () => T0, getToken: async () => ({ token: 't' }) });
+      scout.refresh('full'); await settle(scout);
+      assert.equal(scout.status().error, null);
+      assert.equal(scout.index.repos['real/source'], undefined);
+      assert.equal(scout.badges(['alpha']).alpha.chain, 'mismatch');
+      assert.equal(fake.calls.length, mode === 'invalid' ? 0 : 1);
+    }
+    const fake = canonicalFetch([], {}, async () => { throw new Error('offline'); });
+    const scout = createScout({ file: join(dir, 'cached.json'), runtime: RT, fetch: fake.fetch, now: () => T0, getToken: async () => ({ token: 't' }) });
+    const cached = { ...factOfLike('alpha'), repo: 'real/source' };
+    scout._set({ version: 1, repos: { 'real/source': cached }, npm: { alpha: { at: T0, m: JSON.parse(pkg('alpha', { repository: 'github:real/source' })) } } });
+    scout.refresh('full'); await settle(scout);
+    assert.deepEqual(scout.index.repos['real/source'], cached, 'failed read retains previous independent facts');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('canonical supplementation is capped, concurrency bounded and never recursively enqueues npm', async () => {
+  const dir = await tmp();
+  try {
+    const nodes = Array.from({ length: 105 }, (_, i) => node('copy', `p${i}`, pkg(`p${i}`)));
+    const npm = Object.fromEntries(nodes.map((_, i) => [`p${i}`, JSON.parse(pkg(`p${i}`, { repository: `github:real/p${i}` }))]));
+    const fake = canonicalFetch(nodes, npm, async (key) => {
+      await new Promise((r) => setTimeout(r, 1));
+      const name = key.split('/')[1];
+      return node('real', name, pkg(name, { repository: 'github:never/expand' }));
+    });
+    const scout = createScout({ file: join(dir, 'i.json'), runtime: RT, fetch: fake.fetch, now: () => T0, getToken: async () => ({ token: 't' }) });
+    scout.refresh('full'); await settle(scout);
+    assert.equal(scout.status().running, false);
+    assert.equal(scout.status().error, null);
+    assert.equal(fake.calls.length, 100);
+    assert.equal(new Set(fake.calls).size, 100);
+    assert.ok(fake.peak() <= 3);
+    assert.equal(fake.npmCalls.length, 105);
+    assert.ok(!fake.calls.includes('never/expand'));
+    const missing = nodes.map((_, i) => `real/p${i}`).filter((key) => !scout.index.repos[key]);
+    assert.equal(missing.length, 5);
+    scout.refresh('full'); await settle(scout);
+    assert.equal(scout.status().error, null);
+    assert.ok(missing.every((key) => scout.index.repos[key]), 'next round prioritises missing chains over cached rechecks');
+    assert.equal(fake.npmCalls.length, 105, 'canonical reads never extend npm queue');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -247,9 +346,23 @@ test('incremental refresh keeps unseen repos and caps stale npm re-checks oldest
     await settle(scout);
     assert.equal(scout.status().kind, 'incremental');
     assert.equal(scout.status().error, null);
-    // 过期（>7 天）的 a/c/b 只补最旧的 2 个；从没查过的 e 另算一份配额；d 未过期不查。
+    // 过期（>1 天）的 a/c/b 只补最旧的 2 个；从没查过的 e 另算一份配额；d 未过期不查。
     assert.deepEqual(calls.npm.sort(), ['a', 'c', 'e']);
     assert.equal(scout.records.length, 5, 'incremental never prunes');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('unseen npm cache refreshes after one day, not seven days', async () => {
+  const dir = await tmp();
+  try {
+    const { fetch, calls } = windowFetch({ total: 0, windowsOf: () => [] });
+    const scout = createScout({ file: join(dir, 'index.json'), runtime: RT, fetch, now: () => T0, getToken: async () => ({ token: 't'.repeat(30) }) });
+    scout._set({ version: 1, crawledAt: '2026-10-13T00:00:00Z', fullAt: '2026-10-01T00:00:00Z',
+      npm: { alpha: { at: T0 - 2 * 86_400_000, m: null } }, repos: { 'o/alpha': factOfLike('alpha') } });
+    scout.refresh();
+    await settle(scout);
+    assert.equal(scout.status().error, null);
+    assert.deepEqual(calls.npm, ['alpha']);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -257,10 +370,11 @@ test('apply does not wait for the index: status answers loaded:false first, then
   const dir = await tmp();
   try {
     const routes = [];
+    let teardown;
     const ctx = {
       webServer: { register(r) { routes.push(r); return () => {}; } },
       subprocess: { spawn() { throw new Error('not in test'); } },
-      effect(fn) { fn(); },
+      effect(fn) { teardown = fn(); },
       get: () => ({ admit: () => ({ peer: {} }) }),
       logger: { info() {}, warn() {} },
     };
@@ -269,5 +383,6 @@ test('apply does not wait for the index: status answers loaded:false first, then
     assert.equal(typeof first.body.value.loaded, 'boolean');
     for (let i = 0; i < 100; i++) { if ((await call(routes[0].handler, { url: `${PREFIX}/api/status` })).body.value.loaded) break; await new Promise((r) => setTimeout(r, 5)); }
     assert.equal((await call(routes[0].handler, { url: `${PREFIX}/api/status` })).body.value.loaded, true);
+    await teardown();
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

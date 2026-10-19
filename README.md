@@ -47,7 +47,8 @@ No third-party marketplace or aggregator is used.
 - **Newest first.** Windows are seeded geometrically (last 6 h / 1 d / 3 d / 1 w / 1 mo / 3 mo / older) and paged from the newest. Window counting and paging overlap (3 workers).
 - **Publish while crawling.** Each page is merged into the record set immediately and published every 1.5 s; the UI reloads the list when `status.rev` changes. The previous index stays usable throughout. A checkpoint is written every 30 s.
 - **Pay for change.** With an existing index, a light query fetches metadata only (100 per page, no blobs). Repositories whose `pushedAt` is unchanged keep their facts and only refresh stars and similar metadata; changed ones fetch `package.json` and the patch by node id in batches of 50.
-- **npm in parallel.** npm lookups run alongside the GitHub crawl (8 workers), only for repositories with new pushes, missing entries, or entries older than one day. Entries older than 7 days are refreshed oldest first, at most 800 per run.
+- **npm in parallel.** npm lookups run alongside the GitHub crawl (8 workers), only for repositories with new pushes, missing entries, or entries older than one day. Entries older than one day are refreshed oldest first, at most 800 per run, even when the repository was not seen in that incremental crawl.
+- **Canonical source recovery.** A refresh also follows same-name npm packages' GitHub `repository` links with bounded, exact read-only queries. A source is added only when GitHub's actual root manifest declares the same package name; missing topics never justify treating an unrelated namesake as the publisher. Failed lookups do not fabricate source facts.
 - **Activation does not wait for the index.** The ~30 MB index loads in the background; the UI first sees `loaded: false` and polls.
 
 Measured on 2026-10-14 over a real network:

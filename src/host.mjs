@@ -4,7 +4,7 @@
 import { homedir } from 'node:os';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { crawlRepos, createGithub, npmLatest } from './core/crawl.mjs';
+import { canonicalGithubSlug, crawlRepos, createGithub, npmLatest, pool } from './core/crawl.mjs';
 import { createRecordSet, emptyIndex, facets, factOf, loadIndex, query, saveIndex } from './core/store.mjs';
 import { CATEGORIES } from './core/classify.mjs';
 import { installSpec } from './core/verify.mjs';
@@ -23,6 +23,9 @@ const CHECKPOINT_MS = 30_000;
 const NPM_CONCURRENCY = 8;
 /** 每轮最多补查多少个过期的 npm 清单。 */
 const NPM_STALE_BATCH = 800;
+/** 单轮固定快照，最多 100 个精确仓库查询、3 路并发；不递归扩展 npm 或仓库队列。 */
+const CANONICAL_BATCH = 100;
+const CANONICAL_CONCURRENCY = 3;
 
 export const Config = {
   '~standard': {
@@ -214,7 +217,7 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
       wake();
     }
     // npm 过期项按最旧优先、每轮限量补，避免某一天集中过期造成一次上万请求。
-    const stale = Object.entries(next.npm).filter(([n, e]) => !queued.has(n) && t0 - e.at > NPM_TTL * 7).sort((a, b) => a[1].at - b[1].at).slice(0, staleBatch).map(([n]) => n);
+    const stale = Object.entries(next.npm).filter(([n, e]) => !queued.has(n) && t0 - e.at > NPM_TTL).sort((a, b) => a[1].at - b[1].at).slice(0, staleBatch).map(([n]) => n);
     // 从没查到过 npm 的名字（上轮失败或新出现）也补，同样限量。
     let missing = 0;
     for (const f of Object.values(next.repos)) {
@@ -225,6 +228,42 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
     for (const n of stale) enqueue(n);
     const progressLoop = setInterval(() => { report({ ...state.progress, phase: 'npm', repos: crawled.size, expected: crawled.size }); void tick(); }, 500);
     try { await npmDone; } finally { clearInterval(progressLoop); }
+
+    // npm 只提供定位线索；实际 GitHub HEAD 的 package.name 必须独立一致才能入索引。
+    // 取固定快照，不对补全结果再 enqueue，避免 repository 链无限扩展。
+    const candidates = new Map();
+    const rechecks = new Map();
+    for (const [n, entry] of Object.entries(next.npm)) {
+      if (!keysByName.has(n) || entry?.m?.name !== n) continue;
+      const key = canonicalGithubSlug(entry.m.repository);
+      if (!key) continue;
+      const cached = next.repos[key];
+      const matches = cached?.plugin !== false && cached?.pkg?.name === n;
+      // full 的 topic 清理不能抹去独立核验过、仍被 npm 引用的非 topic 仓库；失败或配额耗尽保留旧事实。
+      if (matches) seen.add(key);
+      if (matches && crawled.has(key)) continue;
+      const target = matches ? rechecks : candidates;
+      if (!target.has(key) && target.size < CANONICAL_BATCH) target.set(key, n);
+    }
+    // 缺失链优先，避免已补全仓库占满后续轮次的配额。
+    for (const [key, n] of rechecks) if (candidates.size < CANONICAL_BATCH) candidates.set(key, n);
+    await pool([...candidates], CANONICAL_CONCURRENCY, async ([key, n]) => {
+      try {
+        const repo = await gh.byRepo(key);
+        if (!repo || repo.pkg?.name !== n) return;
+        const fact = factOf(repo);
+        if (fact.plugin === false) return;
+        next.repos[key] = fact;
+        seen.add(key);
+        indexName(key, fact);
+        set.upsert(key, fact, next.npm);
+        dirty = true;
+      } catch (e) {
+        if (signal.aborted || e.code === 'auth') throw e;
+        // 网络/GraphQL/权限错误不证明仓库不存在，也不把 npm 内容当 GitHub 事实。
+        log(`[scout] canonical lookup failed for ${key}: ${e.message}`);
+      }
+    }, signal);
 
     if (kind === 'full') {
       for (const key of Object.keys(next.repos)) if (!seen.has(key)) { delete next.repos[key]; set.remove(key); dirty = true; }

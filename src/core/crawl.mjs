@@ -21,7 +21,20 @@ const LIGHT = `query($q:String!,$after:String,$n:Int!){ rateLimit{cost remaining
   nodes{ ... on Repository{ id nameWithOwner description stargazerCount pushedAt createdAt isArchived isFork licenseInfo{spdxId} } } } }`;
 /** 只给变动过的仓库补 blob。 */
 const BY_IDS = `query($ids:[ID!]!){ rateLimit{cost remaining resetAt} nodes(ids:$ids){ ... on Repository{ ${FULL_FIELDS} } } }`;
+const BY_REPO = `query($owner:String!,$name:String!){ rateLimit{cost remaining resetAt}
+ repository(owner:$owner,name:$name){ ${FULL_FIELDS} } }`;
 const BLOB_CHUNK = 50;
+
+/** 严格解析 npm repository；不接受 lookalike host、凭据、子路径或路径穿越。仅作为查询线索。 */
+export function canonicalGithubSlug(repository) {
+  const raw = typeof repository === 'string' ? repository : repository?.url;
+  if (typeof raw !== 'string' || raw.length > 2048) return undefined;
+  const m = raw.trim().match(/^(?:(?:git\+)?(?:https?|git):\/\/github\.com\/|(?:git\+)?ssh:\/\/git@github\.com\/|git@github\.com:|github:)?([a-z0-9-]{1,39})\/([a-z0-9_.-]{1,100})(?:#[^\s]*)?$/i);
+  if (!m) return undefined;
+  const name = m[2].replace(/\.git$/i, '');
+  if (!name || name === '.' || name === '..') return undefined;
+  return `${m[1]}/${name}`.toLowerCase();
+}
 const COUNT = 'query($q:String!){ search(type:REPOSITORY,query:$q,first:1){ repositoryCount } }';
 
 const iso = (t) => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -86,12 +99,19 @@ export function createGithub({ token, fetch = globalThis.fetch, signal, onCost }
     }
     if (res.status >= 500) throw Object.assign(new Error(`GitHub ${res.status}`), { code: 'upstream', status: res.status });
     const body = await res.json();
-    if (body.errors?.length && !body.data) throw Object.assign(new Error(body.errors[0].message), { code: 'graphql' });
+    if (body.errors?.length && (!body.data || query === BY_REPO)) throw Object.assign(new Error(body.errors[0].message), { code: 'graphql' });
     if (body.data?.rateLimit) onCost?.(body.data.rateLimit);
     return body.data;
   }
   return {
     async count(q) { return (await gql(COUNT, { q })).search.repositoryCount; },
+    /** 精确只读查询，不依赖 topic/search；拒绝重定向到另一个仓库，身份不能由 npm 合成。 */
+    async byRepo(slug) {
+      if (canonicalGithubSlug(slug) !== slug) return undefined;
+      const [owner, name] = slug.split('/');
+      const fact = normalizeNode((await gql(BY_REPO, { owner, name }))?.repository);
+      return fact?.repo.toLowerCase() === slug ? fact : undefined;
+    },
     /** 翻完一个窗口；502 时按页长逐级降（50 → 25 → 10），同一游标续翻。light=true 只拿元数据、100 条一页。 */
     async *pages(q, { light = false } = {}) {
       let after = null;
