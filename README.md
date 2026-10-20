@@ -119,7 +119,7 @@ Local debugging: add this directory's absolute path on the Plugins page (a link 
 - **Shared refresh path:** automatic refresh uses the existing default mode: incremental after `fullAt` exists, otherwise an initial full crawl. Manual and automatic refresh share one single-flight operation and cannot run overlapping crawls. GitHub cooldowns are respected; a long `Retry-After` defers work rather than being clipped to a shorter wait.
 - **Durable success clock:** `succeededAt` advances only after successful atomic persistence of a completed refresh. Checkpoints preserve the previous success clock; failures do not mark a refresh as successful or discard old facts.
 
-Verification limitation: these automatic-refresh and UI-preservation changes have not been verified in the live DSH GUI.
+Automatic refresh has been manually accepted in the live DSH application. UI position preservation is covered by client regression tests.
 
 ## Security boundaries
 
