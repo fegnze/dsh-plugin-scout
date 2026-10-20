@@ -229,8 +229,26 @@ async function until(check, message) {
 }
 
 // Override only this test's API and always restore it, including on an assertion failure.
-async function withPagedScout(run) {
+async function withPagedScout(run, { polling = false } = {}) {
   const originalFetch = globalThis.fetch;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  const timers = new Map();
+  let poll, interval, running = polling === true;
+  if (polling) {
+    globalThis.setInterval = (callback, ms, ...args) => {
+      if (ms === 1500 || ms === 30000) {
+        poll = callback; interval = ms;
+        const id = Symbol('status poll');
+        timers.set(id, ms);
+        return id;
+      }
+      return originalSetInterval(callback, ms, ...args);
+    };
+    globalThis.clearInterval = (id) => {
+      if (!timers.delete(id)) originalClearInterval(id);
+    };
+  }
   const ctx = mockContext();
   const rows = Array.from({ length: 125 }, (_, i) => row(`plugin-${String(i).padStart(3, '0')}`, `owner/plugin-${i}`, 90));
   const calls = [];
@@ -243,7 +261,7 @@ async function withPagedScout(run) {
       if (u.pathname.endsWith('/refresh')) rev++;
       const response = await originalFetch('/dsh-plugin-scout/api/status', init);
       const payload = await response.json();
-      return ok({ ...payload.value, loaded: true, rev });
+      return ok({ ...payload.value, loaded: true, running, rev });
     }
     if (u.pathname !== '/dsh-plugin-scout/api/list') return originalFetch(url, init);
     assert.equal(init.headers['x-dsh-plugin-scout'], '1');
@@ -272,12 +290,20 @@ async function withPagedScout(run) {
       container: v.container, calls, pending,
       shrink(n) { total = n; },
       defer() { deferNext = true; },
+      async publish() { assert.equal(typeof poll, 'function'); rev++; await act(async () => poll()); },
+      async pollStatus() { assert.equal(typeof poll, 'function'); await act(async () => poll()); },
+      setRunning(value) { running = value; },
+      pollInterval() { return interval; },
+      activeTimers() { return [...timers.values()]; },
     });
   } finally {
     for (const resolve of pending) resolve();
     if (v) await v.close();
     ctx.dispose();
     globalThis.fetch = originalFetch;
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+    assert.equal(timers.size, 0, 'status polling is cleaned up on unmount');
   }
 }
 
@@ -367,6 +393,91 @@ test('sorting and filters reset pagination; a shrinking host total clamps and re
     assert.equal(pageButton(c, '下一页').disabled, true);
     assert.equal(pageButton(c, '上一页').disabled, false);
   });
+});
+
+test('idle polling discovers host refreshes and revisions, switches cadence and cleans up its timer', async () => {
+  await withPagedScout(async ({ container: c, calls, publish, pollStatus, setRunning, pollInterval, activeTimers }) => {
+    await goPage(c, '下一页', '第 2 / 3 页');
+    const results = c.querySelector('.scx-results');
+    results.scrollTop = 340;
+    assert.equal(pollInterval(), 30000);
+    assert.deepEqual(activeTimers(), [30000]);
+    const before = calls.length;
+    await pollStatus();
+    await flush(20);
+    assert.equal(calls.length, before, 'unchanged idle status does not refetch rows');
+    await publish();
+    await until(() => calls.length > before, 'idle revision revalidates visible page');
+    assert.equal(calls.at(-1).offset, 60);
+    assert.equal(results.scrollTop, 340);
+    assert.match(pagination(c).textContent, /第 2 \/ 3 页/);
+    setRunning(true);
+    await pollStatus();
+    assert.equal(pollInterval(), 1500, 'host-started refresh activates fast polling');
+    assert.deepEqual(activeTimers(), [1500], 'old idle timer is removed');
+    assert.ok(find(c, '.scx-fresh button', /^刷新中…$/));
+    setRunning(false);
+    await publish();
+    assert.equal(pollInterval(), 30000);
+    assert.deepEqual(activeTimers(), [30000], 'completion returns to one idle timer');
+    assert.equal(results.scrollTop, 340);
+  }, { polling: 'idle' });
+});
+
+test('background revisions retain visible rows, page and scroll while pending and after completion', async () => {
+  await withPagedScout(async ({ container: c, calls, pending, defer, publish }) => {
+    await goPage(c, '下一页', '第 2 / 3 页');
+    const results = c.querySelector('.scx-results');
+    const first = results.querySelector('.scx-item');
+    results.scrollTop = 350;
+    defer();
+    await publish();
+    await until(() => pending.length === 1, 'revision request pending');
+    assert.equal(calls.at(-1).offset, 60, 'revalidate the current page');
+    assert.equal(results.querySelector('.scx-item'), first, 'keep row DOM mounted to avoid browser scroll clamping');
+    assert.equal(itemRepos(c).length, 60);
+    assert.doesNotMatch(results.textContent, /加载中…/);
+    assert.equal(results.scrollTop, 350);
+    assert.equal(pageButton(c, '下一页').disabled, false, 'background work does not block navigation');
+    results.scrollTop = 480;
+    await act(async () => pending.shift()());
+    await flush(20);
+    assert.equal(results.querySelector('.scx-item'), first);
+    assert.equal(results.scrollTop, 480, 'preserve scrolling performed during revalidation');
+    assert.match(pagination(c).textContent, /第 2 \/ 3 页/);
+    await goPage(c, '下一页', '第 3 / 3 页');
+    assert.equal(results.scrollTop, 0, 'subsequent user navigation still resets');
+  }, { polling: true });
+});
+
+test('a revision during pending user navigation still resets scroll; superseded background replies cannot replace a filter', async () => {
+  await withPagedScout(async ({ container: c, calls, pending, defer, publish }) => {
+    const results = c.querySelector('.scx-results');
+    results.scrollTop = 300;
+    defer();
+    await act(async () => pageButton(c, '下一页').click());
+    await until(() => pending.length === 1, 'user navigation pending');
+    await publish();
+    await until(() => itemRepos(c)[0] === 'owner/plugin-60', 'revision completes requested page');
+    assert.equal(results.scrollTop, 0, 'revision does not swallow pending navigation reset');
+    await act(async () => pending.shift()());
+    results.scrollTop = 260;
+    defer();
+    await publish();
+    await until(() => pending.length === 1, 'background refresh pending');
+    await act(async () => c.querySelector('.scx-filters input[type="checkbox"]').click());
+    await until(() => calls.at(-1).compat.includes('ok') && itemRepos(c)[0] === 'owner/plugin-0', 'filter loaded first page');
+    assert.equal(results.scrollTop, 0);
+    results.scrollTop = 120;
+    await act(async () => pending.shift()());
+    await flush(20);
+    assert.equal(itemRepos(c)[0], 'owner/plugin-0');
+    assert.match(pagination(c).textContent, /第 1 \/ 3 页/);
+    assert.equal(results.scrollTop, 120, 'late background reply cannot move current scroll');
+    await act(async () => c.querySelector('.scx-filters input[type="checkbox"]').click());
+    await until(() => calls.at(-1).compat.length === 0 && results.getAttribute('aria-busy') === 'false', 'filter changes on page one finish');
+    assert.equal(results.scrollTop, 0, 'filters reset even without a page-number change');
+  }, { polling: true });
 });
 
 test('pending pages hide stale rows and disable navigation; a cancelled late reply cannot overwrite newer sorting', async () => {

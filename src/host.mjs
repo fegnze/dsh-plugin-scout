@@ -16,6 +16,26 @@ export const PREFIX = '/dsh-plugin-scout';
 const DAY = 86_400_000;
 const NPM_TTL = DAY;
 const AUTO_DELAY = 45_000;
+const HOUR = 3_600_000;
+
+/** One lifecycle-owned timer; missed intervals are never replayed. */
+export function startAutoRefresh(scout, { enabled = true, hours = 1, now = Date.now, schedule = setTimeout, cancel = clearTimeout } = {}) {
+  let disposed = false;
+  let timer;
+  const interval = hours * HOUR;
+  const tick = async () => {
+    try {
+      await scout.load().catch(() => {});
+      if (disposed) return;
+      const status = scout.status();
+      const last = Date.parse(status.succeededAt ?? status.crawledAt);
+      if (!status.running && (!Number.isFinite(last) || now() - last >= interval)) scout.refresh();
+    } catch { /* load errors are reported by Host; retry on the next interval */ }
+    finally { if (!disposed) timer = schedule(tick, interval); }
+  };
+  if (enabled && Number.isFinite(interval) && interval > 0) timer = schedule(tick, AUTO_DELAY);
+  return () => { disposed = true; if (timer !== undefined) cancel(timer); };
+}
 /** 刷新期间每隔多久把新到的结果发布给界面。 */
 const PUBLISH_MS = 1_500;
 /** 刷新期间每隔多久把已抓到的事实落盘（断点）。 */
@@ -40,8 +60,12 @@ export const Config = {
         if (typeof value[k] !== 'string' || !value[k].trim()) return { issues: [{ message: `${k} must be a non-empty string`, path: [k] }] };
         out[k] = value[k];
       }
+      if (value.autoRefresh !== undefined) {
+        if (typeof value.autoRefresh !== 'boolean') return { issues: [{ message: 'autoRefresh must be boolean', path: ['autoRefresh'] }] };
+        out.autoRefresh = value.autoRefresh;
+      }
       if (value.autoRefreshHours !== undefined) {
-        if (typeof value.autoRefreshHours !== 'number' || value.autoRefreshHours < 0) return { issues: [{ message: 'autoRefreshHours must be >= 0', path: ['autoRefreshHours'] }] };
+        if (!Number.isFinite(value.autoRefreshHours) || value.autoRefreshHours < 0) return { issues: [{ message: 'autoRefreshHours must be >= 0', path: ['autoRefreshHours'] }] };
         out.autoRefreshHours = value.autoRefreshHours;
       }
       return { value: out };
@@ -88,7 +112,8 @@ export async function resolveToken(subprocess) {
       let out = '';
       handle.stdout?.on('data', (b) => { out += b; });
       handle.stderr?.resume?.();
-      const done = await Promise.race([handle.done, new Promise((r) => setTimeout(() => r({ exitCode: -1 }), 10_000))]);
+      let timeout;
+      const done = await Promise.race([handle.done, new Promise((r) => { timeout = setTimeout(() => r({ exitCode: -1 }), 10_000); })]).finally(() => clearTimeout(timeout));
       if (done.exitCode === -1) void handle.terminate();
       const token = out.trim();
       if (done.exitCode === 0 && /^[\w-]{20,}$/.test(token)) return { token, source: 'gh auth token' };
@@ -106,6 +131,14 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
   let rev = 0;
   let job;
   let loading;
+  let stopped = false;
+  let writes = Promise.resolve();
+  const persist = (value) => {
+    const snapshot = structuredClone(value);
+    const pending = writes.then(() => saveIndex(file, snapshot));
+    writes = pending.catch(() => {});
+    return pending;
+  };
   const set = createRecordSet(() => ({ runtime: runtime.runtime, compat: runtime.compat, now: now() }));
   const state = { running: false, kind: null, progress: null, error: null, startedAt: null, cost: null, loaded: false };
 
@@ -124,9 +157,12 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
     return loading;
   }
 
-  async function run(kind, signal) {
+  async function run(kind, controller) {
+    const { signal } = controller;
     await load().catch(() => {});
+    signal.throwIfAborted();
     const { token, source } = await getToken();
+    signal.throwIfAborted();
     if (!token) throw Object.assign(new Error('没有 GitHub token：请先在终端执行 `gh auth login`，或设置 GITHUB_TOKEN'), { code: 'no-token' });
     const gh = createGithub({ token, fetch, signal, onCost: (c) => { state.cost = c; } });
     const t0 = now();
@@ -159,7 +195,11 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
         const n = queue.shift();
         if (n === undefined) {
           if (githubDone) return;
-          await new Promise((r) => { waiters.add(r); setTimeout(r, 200); });
+          await new Promise((r) => {
+            const done = () => { clearTimeout(timer); waiters.delete(done); r(); };
+            const timer = setTimeout(done, 200);
+            waiters.add(done);
+          });
           continue;
         }
         const m = await npmLatest(n, { fetch, signal });
@@ -168,7 +208,10 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
       }
     });
     // 先挂上接收者：GitHub 一侧失败/中止时 worker 也会抛，不能变成未处理的 rejection（会带崩宿主进程）。
-    const npmDone = Promise.all(npmWorkers);
+    const npmDone = Promise.allSettled(npmWorkers).then((results) => {
+      const failed = results.find((r) => r.status === 'rejected');
+      if (failed) throw failed.reason;
+    });
     npmDone.catch(() => {});
 
     let lastPublish = now();
@@ -179,7 +222,7 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
       if (force || t - lastCheckpoint >= checkpointMs) {
         lastCheckpoint = t;
         // 断点：事实先落盘（crawledAt 不动），中途退出也不丢已抓到的部分，下次增量从旧水位接着补。
-        await saveIndex(file, next).catch((e) => log(`[scout] checkpoint failed: ${e.message}`));
+        await persist(next).catch((e) => log(`[scout] checkpoint failed: ${e.message}`));
       }
     };
     const report = (p) => { state.progress = { ...p, npm: { ...npmState }, tokenSource: source, published: records.length }; };
@@ -211,6 +254,8 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
       });
     } catch (e) {
       queue.length = 0;
+      controller.abort(e);
+      await npmDone.catch(() => {});
       throw e;
     } finally {
       githubDone = true;
@@ -259,7 +304,7 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
         set.upsert(key, fact, next.npm);
         dirty = true;
       } catch (e) {
-        if (signal.aborted || e.code === 'auth') throw e;
+        if (signal.aborted || e.code === 'auth' || e.code === 'rate-limit') throw e;
         // 网络/GraphQL/权限错误不证明仓库不存在，也不把 npm 内容当 GitHub 事实。
         log(`[scout] canonical lookup failed for ${key}: ${e.message}`);
       }
@@ -270,34 +315,38 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
     }
     next.crawledAt = new Date(t0).toISOString();
     if (kind === 'full') next.fullAt = next.crawledAt;
+    signal.throwIfAborted();
+    next.succeededAt = new Date(now()).toISOString();
+    // Commit the success clock only after the atomic write succeeds. Checkpoints
+    // retain the previous clock and are serialized ahead of this final snapshot.
+    await persist(next);
     index = next;
-    dirty = true;
-    await tick(true);
+    publish();
     log(`[scout] ${kind} refresh: ${crawled.size} repos (${state.progress?.changed ?? '-'} changed, ${state.progress?.unchanged ?? '-'} unchanged), ${npmState.total} npm lookups, ${records.length} plugins`);
   }
 
   function refresh(kind) {
-    if (state.running) return false;
+    if (stopped || state.running || now() < (state.retryAt ?? 0)) return false;
     const controller = new AbortController();
     Object.assign(state, { running: true, kind: kind ?? null, progress: null, error: null, startedAt: new Date(now()).toISOString() });
     const go = async () => {
       await load().catch(() => {});
       const k = kind ?? (index.fullAt ? 'incremental' : 'full');
       state.kind = k;
-      await run(k, controller.signal);
+      await run(k, controller);
     };
-    job = { controller, promise: go().catch((e) => { state.error = { code: e.code ?? 'error', message: e.message }; log(`[scout] refresh failed: ${e.message}`); }).finally(() => { state.running = false; state.progress = null; job = undefined; }) };
+    job = { controller, promise: go().catch((e) => { controller.abort(e); rebuild(); state.retryAt = e.retryAt ?? null; state.error = { code: e.code ?? 'error', message: e.message }; log(`[scout] refresh failed: ${e.message}`); }).finally(() => { state.running = false; state.progress = null; job = undefined; }) };
     return true;
   }
 
   return {
     load,
     refresh,
-    async stop() { job?.controller.abort(); await job?.promise; },
+    async stop() { stopped = true; job?.controller.abort(); await job?.promise; await writes; },
     get index() { return index; },
     get records() { return records; },
     status() {
-      return { ...state, rev, crawledAt: index.crawledAt, fullAt: index.fullAt, runtime: runtime.runtime, runtimeSource: runtime.source, repos: Object.keys(index.repos).length, facets: facets(records), categories: Object.fromEntries(Object.entries(CATEGORIES).map(([k, v]) => [k, v.label])) };
+      return { ...state, rev, crawledAt: index.crawledAt, succeededAt: index.succeededAt ?? null, fullAt: index.fullAt, runtime: runtime.runtime, runtimeSource: runtime.source, repos: Object.keys(index.repos).length, facets: facets(records), categories: Object.fromEntries(Object.entries(CATEGORIES).map(([k, v]) => [k, v.label])) };
     },
     list: (params) => query(records, params),
     detail(key) {
@@ -364,7 +413,9 @@ export function createHandler(scout, { admit }) {
       if (req.method === 'POST' && path === '/api/refresh') {
         const b = await readJson(req);
         const started = scout.refresh(b.full === true ? 'full' : undefined);
-        return send(res, started ? 202 : 409, { ok: started, value: scout.status(), ...(started ? {} : { error: { code: 'busy', message: '已有刷新在进行' } }) });
+        const status = scout.status();
+        const cooling = status.retryAt > Date.now();
+        return send(res, started ? 202 : cooling ? 429 : 409, { ok: started, value: status, ...(started ? {} : { error: { code: cooling ? 'rate-limit' : 'busy', message: cooling ? 'GitHub 限流冷却中，请稍后重试' : '已有刷新在进行' } }) });
       }
       return send(res, 404, { ok: false, error: { code: 'not-found', message: path } });
     } catch (e) {
@@ -387,16 +438,9 @@ export async function apply(ctx, config = {}) {
   ctx.effect(() => {
     const dispose = ctx.webServer.register({ kind: 'prefix', path: PREFIX, handler: createHandler(scout, { admit }) });
     // 进程内定时：App 运行时才跑，不设 LaunchAgent/外部调度器。
-    const hours = config.autoRefreshHours ?? 24;
-    let timer;
-    const tick = () => {
-      const last = scout.index.crawledAt ? Date.parse(scout.index.crawledAt) : 0;
-      if (hours > 0 && Date.now() - last > hours * 3_600_000) scout.refresh();
-      if (hours > 0) timer = setTimeout(tick, Math.min(hours * 3_600_000, 6 * 3_600_000));
-    };
-    timer = setTimeout(tick, AUTO_DELAY);
+    const stopAutoRefresh = startAutoRefresh(scout, { enabled: config.autoRefresh ?? true, hours: config.autoRefreshHours ?? 1 });
     return async () => {
-      clearTimeout(timer);
+      stopAutoRefresh();
       dispose();
       await scout.stop();
     };

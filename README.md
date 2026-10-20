@@ -93,7 +93,7 @@ Ten purpose categories: UI, session, memory, agent, tools, models, security, dev
 ## UI and integration points
 
 - **Scout tab:** **Plugins → Scout**, contributed through `plugins.tab` (`id: dsh-plugin-scout`, `order: 40`), with search, filters (compatibility, risk, kind, installed state, copies), category chips, sorting and paging. There is no sidebar entry or separate `main` panel. The official Plugins page owns the heading; Scout adds no duplicate page title or subtitle. Scout fits the remaining viewport height: plugin results scroll independently below the category and sort controls, and overflowing filters have their own scroll area. Wheel scrolling at either area's boundary does not propagate to the page. The official **Discover** tab remains unchanged.
-- **Pagination:** defaults to descending star count, with 60 plugins per page; enter a valid page number and click **Jump** or press Enter to go directly to it; **Previous / Next** and page/total counts stay below the independently scrolling results. Changing search, filters, category or sort returns to page 1. Each page replaces the results and resets their scroll position after loading; navigation is disabled while loading. If the index shrinks, Scout returns to the last available page.
+- **Pagination:** defaults to descending star count, with 60 plugins per page; enter a valid page number and click **Jump** or press Enter to go directly to it; **Previous / Next** and page/total counts stay below the independently scrolling results. Changing search, filters, category or sort returns to page 1 and resets the results' scroll position after loading; explicit page navigation also resets scroll. Background index updates preserve the current page and scroll position; navigation is disabled while loading. If the index shrinks, Scout returns to the last available page.
 - **Details drawer:** checklist, score breakdown, category evidence, source chain and copies, surface (cordis inserts, `client.inject`, peers), and the official pre-install check. Footer:
   - **Install / Enable / Cancel install**, as described above.
   - **Copy pinned spec:** copies `name@npmVersion`, or `github:owner/repo` when unpublished.
@@ -114,8 +114,12 @@ Local debugging: add this directory's absolute path on the Plugins page (a link 
 ## Data and configuration
 
 - Index: `~/.dsh/dsh-plugin-scout/index.json` stores facts only (repo metadata, slimmed manifests, npm cache) and is re-judged against the current runtime on every load, so compatibility verdicts follow DSH upgrades automatically.
-- Auto refresh: an in-process timer checks 45 s after start and runs an incremental crawl when the index is older than `autoRefreshHours` (default 24; 0 disables). No LaunchAgent or external scheduler.
-- Optional config: `dataDir`, `topic`, `runtimeVersion` (overrides runtime detection), `autoRefreshHours`.
+- Optional config: `dataDir`, `topic`, `runtimeVersion` (overrides runtime detection), `autoRefresh` (boolean, default `true`), `autoRefreshHours` (hours, default `1`). Set `autoRefresh: false` to disable automatic refresh; `autoRefreshHours: 0` remains the legacy disable switch.
+- **Host-only scheduling:** after a 45 s startup grace period and index loading, Scout checks whether the persisted `succeededAt` completion time is older than the configured interval, falling back to the legacy `crawledAt` crawl-start watermark when no completion clock exists. One in-process timeout checks each interval; missed intervals are not replayed. Scheduling lives only in the DSH Host, not the browser or a daemon; no LaunchAgent or external scheduler is created, and plugin disposal cancels the timeout.
+- **Shared refresh path:** automatic refresh uses the existing default mode: incremental after `fullAt` exists, otherwise an initial full crawl. Manual and automatic refresh share one single-flight operation and cannot run overlapping crawls. GitHub cooldowns are respected; a long `Retry-After` defers work rather than being clipped to a shorter wait.
+- **Durable success clock:** `succeededAt` advances only after successful atomic persistence of a completed refresh. Checkpoints preserve the previous success clock; failures do not mark a refresh as successful or discard old facts.
+
+Verification limitation: these automatic-refresh and UI-preservation changes have not been verified in the live DSH GUI.
 
 ## Security boundaries
 

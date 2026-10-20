@@ -4,7 +4,39 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import { Config, PREFIX, apply, createHandler, createScout } from '../src/host.mjs';
+import { Config, PREFIX, apply, createHandler, createScout, startAutoRefresh } from '../src/host.mjs';
+
+test('auto refresh: loaded success clock, hourly cadence, no wake backlog, disable and dispose', async () => {
+  let time = 10_000_000; let calls = 0; let task; let cancelled;
+  let status = { crawledAt: new Date(0).toISOString(), succeededAt: new Date(time).toISOString() };
+  const scout = { load: async () => {}, status: () => status, refresh: () => { calls++; } };
+  const opts = { now: () => time, schedule: (fn, ms) => { task = { fn, ms }; return task; }, cancel: (h) => { cancelled = h; } };
+  const dispose = startAutoRefresh(scout, opts);
+  assert.equal(task.ms, 45_000);
+  await task.fn(); assert.equal(calls, 0, 'recent completion beats old crawl start');
+  assert.equal(task.ms, 3_600_000);
+  time += 12 * 3_600_000;
+  await task.fn(); assert.equal(calls, 1, 'sleep catches up once');
+  status.running = true;
+  await task.fn(); assert.equal(calls, 1, 'manual refresh already running');
+  dispose(); assert.equal(cancelled, task);
+  await task.fn(); assert.equal(calls, 1, 'queued callback cannot revive disposed timer');
+  task = undefined;
+  startAutoRefresh(scout, { ...opts, enabled: false }); assert.equal(task, undefined);
+  startAutoRefresh(scout, { ...opts, hours: 0 }); assert.equal(task, undefined);
+  status = { crawledAt: new Date(time - 3_600_000).toISOString() };
+  const legacy = startAutoRefresh(scout, opts);
+  await task.fn(); assert.equal(calls, 2, 'legacy clock fallback'); legacy();
+});
+
+test('auto refresh waits for load and cannot resurrect after dispose during load', async () => {
+  let ready; let callback; let calls = 0; let scheduled = 0;
+  const dispose = startAutoRefresh({ load: () => new Promise((r) => { ready = r; }), status: () => ({}), refresh: () => calls++ }, {
+    schedule: (fn) => { callback = fn; scheduled++; return 1; }, cancel: () => {},
+  });
+  const pending = callback(); dispose(); ready(); await pending;
+  assert.equal(calls, 0); assert.equal(scheduled, 1);
+});
 
 const RT = { runtime: '0.2.0-rc.2', source: 'test' };
 const T0 = Date.parse('2026-10-14T00:00:00Z');
@@ -57,6 +89,35 @@ function canonicalFetch(nodes, npm, canonical) {
   return { fetch, calls, npmCalls: base.calls.npm, peak: () => peak };
 }
 
+test('failed final persistence does not advance successful clock or replace the index', async () => {
+  const dir = await tmp();
+  try {
+    const scout = createScout({ file: dir, runtime: RT, now: () => T0, fetch: fakeFetch([]).fetch, getToken: async () => ({ token: 'test' }) });
+    scout._set({ version: 1, crawledAt: '2026-10-01T00:00:00Z', fullAt: '2026-10-01T00:00:00Z', repos: {}, npm: {} });
+    scout.refresh(); await settle(scout);
+    assert.ok(scout.status().error);
+    assert.equal(scout.status().crawledAt, '2026-10-01T00:00:00Z');
+    assert.equal(scout.status().succeededAt, null);
+    await scout.stop(); assert.equal(scout.refresh(), false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('long GitHub Retry-After defers refresh and prevents manual or automatic cooldown bypass', async () => {
+  const dir = await tmp(); let calls = 0;
+  try {
+    const scout = createScout({ file: join(dir, 'index.json'), runtime: RT, getToken: async () => ({ token: 'test' }), fetch: async () => {
+      calls++; return { status: 429, headers: new Headers({ 'retry-after': '7200' }) };
+    } });
+    await scout.load(); scout.refresh(); await settle(scout);
+    assert.equal(scout.status().running, false);
+    assert.equal(scout.status().error.code, 'rate-limit');
+    assert.ok(scout.status().retryAt > Date.now() + 7_000_000);
+    const before = calls; assert.equal(scout.refresh(), false); assert.equal(calls, before);
+    assert.equal(scout.status().succeededAt, null);
+    await scout.stop();
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 async function tmp() { return mkdtemp(join(tmpdir(), 'scout-')); }
 
 async function settle(scout) { for (let i = 0; i < 200 && scout.status().running; i++) await new Promise((r) => setTimeout(r, 5)); }
@@ -68,6 +129,9 @@ test('Config validator accepts the documented keys and rejects junk', () => {
   assert.ok(v({ topic: '' }).issues);
   assert.ok(v({ autoRefreshHours: -1 }).issues);
   assert.ok(v([]).issues);
+  assert.deepEqual(v({ autoRefresh: false }).value, { autoRefresh: false });
+  for (const autoRefreshHours of [NaN, Infinity, -Infinity, '1']) assert.ok(v({ autoRefreshHours }).issues);
+  assert.ok(v({ autoRefresh: 1 }).issues);
 });
 
 test('refresh: full crawl writes a facts-only index, npm looked up for plugins only, verdicts derived on load', async () => {
@@ -86,6 +150,7 @@ test('refresh: full crawl writes a facts-only index, npm looked up for plugins o
     assert.deepEqual(calls.npm, ['alpha']);
     const saved = JSON.parse(await readFile(file, 'utf8'));
     assert.equal(saved.fullAt, new Date(T0).toISOString());
+    assert.equal(saved.succeededAt, new Date(T0).toISOString());
     assert.equal(Object.keys(saved.repos).length, 3);
     assert.equal(saved.repos['o/notes'].plugin, false);
     assert.equal(saved.repos['o/alpha'].score, undefined, 'index stores facts, not verdicts');

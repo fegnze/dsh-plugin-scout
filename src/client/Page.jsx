@@ -28,6 +28,8 @@ export function ScoutPage({ face }) {
   const [toast, setToast] = useState(null);
   const installed = face.useInstalled();
   const seq = useRef(0);
+  const loadedQuery = useRef(null);
+  const resetScroll = useRef(false);
   const pageRef = useRef(null);
   const [pageHeight, setPageHeight] = useState(null);
 
@@ -59,29 +61,44 @@ export function ScoutPage({ face }) {
     try { setStatus(await api.status()); setError(null); } catch (e) { setError(e.message); }
   }, []);
   useEffect(() => { void loadStatus(); }, [loadStatus]);
-  // 索引后台加载中或刷新进行中轮询状态；status.rev 每次发布都会变，列表随之重拉（边抓边看）。
+  // Idle polling discovers host-initiated refreshes; active work gets faster progress updates.
   const busy = !!status && (status.running || !status.loaded);
   useEffect(() => {
-    if (!busy) return undefined;
-    const h = setInterval(loadStatus, 1500);
+    const h = setInterval(loadStatus, busy ? 1500 : 30000);
     return () => clearInterval(h);
   }, [busy, loadStatus]);
 
   const installedKey = installed.join('\n');
+  // Revisions and installed-state updates revalidate the visible page, not user navigation.
+  const queryKey = JSON.stringify([q, cat, sort, compat, flags, inst, page]);
+  useLayoutEffect(() => {
+    if (resetScroll.current && resultsRef.current) resultsRef.current.scrollTop = 0;
+    resetScroll.current = false;
+  }, [data]);
   useEffect(() => {
     const id = ++seq.current;
-    setLoading(true);
+    const background = loadedQuery.current === queryKey;
+    // Once navigation starts, even a revision/revert must finish as a foreground load.
+    if (!background) loadedQuery.current = null;
+    setLoading(!background);
     const h = setTimeout(async () => {
       try {
         const v = await api.list({ q, cat, sort, compat, flags, inst, installed, offset: page * PAGE, limit: PAGE });
         if (id !== seq.current) return;
         const last = Math.max(0, Math.ceil(v.total / PAGE) - 1);
         if (page > last) { setPage(last); return; }
+        loadedQuery.current = queryKey;
+        resetScroll.current = !background;
         setData(v);
         setError(null);
         setLoading(false);
-        if (resultsRef.current) resultsRef.current.scrollTop = 0;
-      } catch (e) { if (id === seq.current) { setError(e.message); setData(null); setLoading(false); } }
+      } catch (e) {
+        if (id === seq.current) {
+          setError(e.message);
+          if (!background) { loadedQuery.current = null; setData(null); }
+          setLoading(false);
+        }
+      }
     }, q ? 180 : 0);
     return () => { clearTimeout(h); ++seq.current; };
   }, [q, cat, sort, compat.join(), flags.join(), inst, installedKey, page, status?.rev]);

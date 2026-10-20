@@ -39,8 +39,10 @@ const COUNT = 'query($q:String!){ search(type:REPOSITORY,query:$q,first:1){ repo
 
 const iso = (t) => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const sleep = (ms, signal) => new Promise((res, rej) => {
-  const h = setTimeout(res, ms);
-  signal?.addEventListener('abort', () => { clearTimeout(h); rej(signal.reason ?? new Error('aborted')); }, { once: true });
+  if (signal?.aborted) return rej(signal.reason ?? new Error('aborted'));
+  const abort = () => { clearTimeout(h); rej(signal.reason ?? new Error('aborted')); };
+  const h = setTimeout(() => { signal?.removeEventListener('abort', abort); res(); }, ms);
+  signal?.addEventListener('abort', abort, { once: true });
 });
 
 /** 只保留核验与分类要用的 package.json 字段，索引体积降一个量级。 */
@@ -85,20 +87,36 @@ export function normalizeNode(n) {
 }
 
 export function createGithub({ token, fetch = globalThis.fetch, signal, onCost }) {
+  let retryAt = 0;
   async function gql(query, variables, attempt = 0) {
+    signal?.throwIfAborted();
+    if (Date.now() < retryAt) throw Object.assign(new Error('GitHub rate limit; refresh deferred'), { code: 'rate-limit', retryAt });
     const res = await fetch(GQL, {
       method: 'POST', signal,
       headers: { authorization: `bearer ${token}`, 'content-type': 'application/json', 'user-agent': 'dsh-plugin-scout' },
       body: JSON.stringify({ query, variables }),
     });
     if (res.status === 401) throw Object.assign(new Error('GitHub token 无效或已过期'), { code: 'auth' });
-    if ((res.status === 403 || res.status === 429) && attempt < 4) {
-      const wait = Number(res.headers.get('retry-after')) * 1000 || 60_000;
-      await sleep(Math.min(wait, 300_000), signal);
+    if (res.status === 403 || res.status === 429) {
+      const raw = res.headers.get('retry-after');
+      const delay = raw && Number.isFinite(Number(raw)) ? Number(raw) * 1000 : Date.parse(raw) - Date.now();
+      const reset = Number(res.headers.get('x-ratelimit-reset')) * 1000;
+      const wait = Math.max(Number.isFinite(delay) ? delay : 60_000, reset - Date.now(), 1000);
+      // Long server cooldowns are returned to the owner, never truncated into an early retry.
+      if (attempt >= 4 || wait > 300_000) {
+        retryAt = Math.max(retryAt, Date.now() + wait);
+        throw Object.assign(new Error('GitHub rate limit; refresh deferred'), { code: 'rate-limit', retryAt });
+      }
+      await sleep(wait, signal);
       return gql(query, variables, attempt + 1);
     }
     if (res.status >= 500) throw Object.assign(new Error(`GitHub ${res.status}`), { code: 'upstream', status: res.status });
     const body = await res.json();
+    const limited = body.errors?.some((e) => e.type === 'RATE_LIMITED' || e.extensions?.code === 'RATE_LIMITED');
+    if (limited || body.data?.rateLimit?.remaining === 0) {
+      retryAt = Math.max(Date.parse(body.data?.rateLimit?.resetAt) || 0, Date.now() + 60_000);
+      throw Object.assign(new Error('GitHub rate limit; refresh deferred'), { code: 'rate-limit', retryAt });
+    }
     if (body.errors?.length && (!body.data || query === BY_REPO)) throw Object.assign(new Error(body.errors[0].message), { code: 'graphql' });
     if (body.data?.rateLimit) onCost?.(body.data.rateLimit);
     return body.data;
@@ -192,7 +210,7 @@ export async function crawlRepos({ gh, topic = 'dsh-plugin', since, now = Date.n
   const stats = { changed: 0, unchanged: 0 };
   // 总数只用于进度分母：不等它，和切窗、翻页同时跑。
   let expected = 0;
-  const totalQ = gh.count(`topic:${topic} fork:true ${field}:${iso(from)}..${iso(now)}`).then((n) => { expected = n; report(); }, (e) => { if (e.code === 'auth') throw e; });
+  const totalQ = gh.count(`topic:${topic} fork:true ${field}:${iso(from)}..${iso(now)}`).then((n) => { expected = n; report(); }, () => { /* progress estimate is optional; authoritative window queries report errors */ });
   let windowsDone = 0;
   let windowsSeen = 0;
   const report = () => onProgress?.({ phase: 'github', repos: out.size, expected, windows: windowsDone, totalWindows: windowsSeen, ...stats });
@@ -228,7 +246,7 @@ export async function crawlRepos({ gh, topic = 'dsh-plugin', since, now = Date.n
     }
     windowsDone++;
     report();
-  }, signal);
+  }, signal).finally(() => totalQ);
   await totalQ;
   return out;
 }
@@ -251,7 +269,9 @@ export async function poolIter(iterable, size, fn, signal) {
       await fn(r.value);
     }
   });
-  await Promise.all(workers);
+  const results = await Promise.allSettled(workers);
+  const failed = results.find((r) => r.status === 'rejected');
+  if (failed) throw failed.reason;
 }
 
 /** npm `/<name>/latest`：200 → 精简清单，404 → null，其它错误 → undefined（下次再查）。 */
@@ -279,5 +299,7 @@ export async function pool(items, size, fn, signal) {
       await fn(items[k], k);
     }
   });
-  await Promise.all(workers);
+  const results = await Promise.allSettled(workers);
+  const failed = results.find((r) => r.status === 'rejected');
+  if (failed) throw failed.reason;
 }

@@ -6,6 +6,20 @@ import { compatibility, evaluate, githubSlug, installSpec, markShadows, patchIns
 import { canonicalGithubSlug, normalizeNode, slimManifest, windows, crawlRepos, createGithub, poolIter } from '../src/core/crawl.mjs';
 import { createRecordSet, deriveRecords, emptyIndex, facets, factOf, query } from '../src/core/store.mjs';
 
+test('GitHub cooldown handles HTTP dates and GraphQL exhaustion without extra requests', async () => {
+  for (const response of [
+    { status: 429, headers: new Headers({ 'retry-after': new Date(Date.now() + 7_200_000).toUTCString() }) },
+    { status: 200, json: async () => ({ errors: [{ type: 'RATE_LIMITED', message: 'limited' }] }) },
+    { status: 200, json: async () => ({ data: { rateLimit: { remaining: 0, resetAt: new Date(Date.now() + 7_200_000).toISOString() } } }) },
+  ]) {
+    let calls = 0;
+    const gh = createGithub({ token: 't', fetch: async () => { calls++; return response; } });
+    await assert.rejects(gh.count('x'), (e) => e.code === 'rate-limit' && e.retryAt > Date.now());
+    await assert.rejects(gh.count('x'), (e) => e.code === 'rate-limit');
+    assert.equal(calls, 1);
+  }
+});
+
 const RT = '0.2.0-rc.2';
 const NOW = Date.parse('2026-10-14T00:00:00Z');
 const fixture = async (n) => JSON.parse(await readFile(new URL(`fixtures/${n}`, import.meta.url), 'utf8'));
