@@ -81,7 +81,8 @@ body[data-ds-dark-theme] .scx-root {
 .scx-tag[data-tone="cat2"] { background: transparent; color: var(--scx-cat); border: 1px solid color-mix(in srgb, var(--scx-cat) 30%, transparent); }
 .scx-meta { text-align: right; color: var(--scx-ink3); font-size: 12px; white-space: nowrap; }
 .scx-empty { padding: 56px 0; text-align: center; color: var(--scx-ink3); }
-.scx-more { display: flex; justify-content: center; padding: 8px 0; }
+.scx-pagination { display: flex; flex-shrink: 0; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; padding: 12px 0 0; border-top: 1px solid var(--scx-hair); }
+.scx-pagination span { color: var(--scx-ink3); font-size: 12px; font-variant-numeric: tabular-nums; }
 .scx-note { border: 1px solid var(--scx-hair); border-radius: 9px; padding: 10px 12px; margin-bottom: 10px; color: var(--scx-ink2); font-size: 12px; }
 .scx-note[data-tone="bad"] { border-color: var(--scx-bad); color: var(--scx-bad); }
 .scx-progress { height: 3px; background: var(--scx-hair); border-radius: 2px; overflow: hidden; margin-top: 6px; }

@@ -146,6 +146,12 @@ test('query: category counts are orthogonal to the category filter; paging and s
   assert.deepEqual(one.cats, all.cats, 'counts do not depend on the selected category');
   assert.ok(all.rows.every((r, i, a) => i === 0 || a[i - 1].score >= r.score));
   assert.equal(query(recs, { limit: 5 }).rows.length, Math.min(5, all.total));
+  const ordered = query(recs, { limit: 200 });
+  const second = query(recs, { offset: 5, limit: 5 });
+  assert.deepEqual(second.rows, ordered.rows.slice(5, 10), 'query returns only the requested page');
+  assert.equal(second.total, ordered.total);
+  assert.deepEqual(second.cats, ordered.cats);
+  assert.equal(query(recs, { offset: ordered.total + 1, limit: 5 }).rows.length, 0);
   const f = facets(recs);
   assert.equal(f.compat.ok + f.compat.incompatible + f.compat.none, f.plugins);
   const inst = all.rows[0].name;

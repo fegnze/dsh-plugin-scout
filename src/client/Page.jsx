@@ -19,7 +19,9 @@ export function ScoutPage({ face }) {
   const [compat, setCompat] = useState([]);
   const [flags, setFlags] = useState([]);
   const [inst, setInst] = useState('all');
-  const [limit, setLimit] = useState(PAGE);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const resultsRef = useRef(null);
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [toast, setToast] = useState(null);
@@ -67,16 +69,23 @@ export function ScoutPage({ face }) {
   const installedKey = installed.join('\n');
   useEffect(() => {
     const id = ++seq.current;
+    setLoading(true);
     const h = setTimeout(async () => {
       try {
-        const v = await api.list({ q, cat, sort, compat, flags, inst, installed, limit });
-        if (id === seq.current) { setData(v); setError(null); }
-      } catch (e) { if (id === seq.current) setError(e.message); }
+        const v = await api.list({ q, cat, sort, compat, flags, inst, installed, offset: page * PAGE, limit: PAGE });
+        if (id !== seq.current) return;
+        const last = Math.max(0, Math.ceil(v.total / PAGE) - 1);
+        if (page > last) { setPage(last); return; }
+        setData(v);
+        setError(null);
+        setLoading(false);
+        if (resultsRef.current) resultsRef.current.scrollTop = 0;
+      } catch (e) { if (id === seq.current) { setError(e.message); setData(null); setLoading(false); } }
     }, q ? 180 : 0);
-    return () => clearTimeout(h);
-  }, [q, cat, sort, compat.join(), flags.join(), inst, installedKey, limit, status?.rev]);
+    return () => { clearTimeout(h); ++seq.current; };
+  }, [q, cat, sort, compat.join(), flags.join(), inst, installedKey, page, status?.rev]);
 
-  const toggle = (list, set, v) => { set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]); setLimit(PAGE); };
+  const toggle = (list, set, v) => { set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]); setPage(0); };
   const labels = status?.categories ?? {};
   const facets = status?.facets;
   const instSet = useMemo(() => new Set(installed), [installedKey]);
@@ -91,7 +100,7 @@ export function ScoutPage({ face }) {
       <div className="scx-top">
         <div className="scx-search">
           <svg className="scx-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5" stroke="currentColor" strokeWidth="1.5" /><path d="m16 16 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-          <input type="search" aria-label="搜索插件" placeholder="搜索插件" title="名称、描述、仓库、分类" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
+          <input type="search" aria-label="搜索插件" placeholder="搜索插件" title="名称、描述、仓库、分类" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} />
         </div>
         <div className="scx-fresh">
           <span title={status?.runtimeSource}>运行时 {status?.runtime ?? '…'}</span>
@@ -116,7 +125,7 @@ export function ScoutPage({ face }) {
           </div>
           <div className="scx-fg">
             <h4>本机</h4>
-            {[['all', '全部'], ['hide', '隐藏已安装'], ['only', '只看已安装']].map(([v, l]) => <label key={v}><input type="radio" name="scx-inst" checked={inst === v} onChange={() => { setInst(v); setLimit(PAGE); }} />{l}</label>)}
+            {[['all', '全部'], ['hide', '隐藏已安装'], ['only', '只看已安装']].map(([v, l]) => <label key={v}><input type="radio" name="scx-inst" checked={inst === v} onChange={() => { setInst(v); setPage(0); }} />{l}</label>)}
           </div>
           <div className="scx-fg">
             <h4>同名副本</h4>
@@ -132,7 +141,7 @@ export function ScoutPage({ face }) {
           {empty ? <div className="scx-note">还没有索引。抓取边进行边出结果——最近活跃的插件几秒内就会出现，其余在后台补齐，期间可正常使用 DSH。<button type="button" className="scx-btn" style={{ marginLeft: 8 }} onClick={() => refresh(true)}>开始抓取</button></div> : null}
           <div className="scx-cats" role="tablist" aria-label="用途分类">
             {['all', ...Object.keys(labels), 'other'].filter((id) => id !== 'other' || (data?.cats.other ?? 0) > 0 || cat === 'other').map((id) => (
-              <button key={id} type="button" role="tab" className="scx-cat" aria-selected={cat === id} onClick={() => { setCat(id); setLimit(PAGE); }}>
+              <button key={id} type="button" role="tab" className="scx-cat" aria-selected={cat === id} onClick={() => { setCat(id); setPage(0); }}>
                 {id === 'all' ? '全部' : id === 'other' ? '未归类' : labels[id]}<span className="scx-n">{data?.cats[id] ?? ''}</span>
               </button>
             ))}
@@ -140,13 +149,14 @@ export function ScoutPage({ face }) {
           <div className="scx-lhead">
             <span>{data ? `${data.total.toLocaleString()} 个插件${status?.running ? '（抓取中，持续增加）' : ''}` : '加载中…'}</span>
             <span style={{ marginLeft: 'auto' }}>排序</span>
-            <select aria-label="排序" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <select aria-label="排序" value={sort} onChange={(e) => { setSort(e.target.value); setPage(0); }}>
               <option value="score">可信度</option><option value="stars">star</option><option value="recent">最近推送</option><option value="name">名称</option>
             </select>
           </div>
-          <div className="scx-results" role="region" aria-label="插件列表" tabIndex={0}>
-          {data && !data.rows.length && !empty ? <div className="scx-empty">没有符合条件的插件。放宽左侧筛选，或换个关键词。</div> : null}
-          {data?.rows.map((r) => (
+          <div ref={resultsRef} className="scx-results" role="region" aria-label="插件列表" aria-busy={loading} tabIndex={0}>
+          {loading ? <div className="scx-empty" role="status">加载中…</div> : null}
+          {!loading && data && !data.rows.length && !empty ? <div className="scx-empty">没有符合条件的插件。放宽左侧筛选，或换个关键词。</div> : null}
+          {!loading && data?.rows.map((r) => (
             <button type="button" key={r.repo} className="scx-item" aria-current={sel === r.repo} data-repo={r.repo} onClick={() => setSel(r.repo)}>
               <div className="scx-score" data-band={band(r.score)} title={r.scoreParts.map(([k, n]) => `${k} ${n > 0 ? '+' : ''}${n}`).join('\n')}>{r.score}</div>
               <div style={{ minWidth: 0 }}>
@@ -157,8 +167,12 @@ export function ScoutPage({ face }) {
               <div className="scx-meta"><div>★ {r.stars.toLocaleString()}</div><div>{r.repo.split('/')[0]}</div><div>{ago(r.pushedAt)}</div></div>
             </button>
           ))}
-          {data && data.rows.length < data.total ? <div className="scx-more"><button type="button" className="scx-btn" onClick={() => setLimit(limit + PAGE)}>再显示 {Math.min(PAGE, data.total - data.rows.length)} 个</button></div> : null}
           </div>
+          <nav className="scx-pagination" aria-label="插件分页">
+            <button type="button" className="scx-btn" disabled={loading || !data || page === 0} onClick={() => setPage(page - 1)}>上一页</button>
+            <span role="status" aria-live="polite">第 {page + 1} / {Math.max(1, Math.ceil((data?.total ?? 0) / PAGE))} 页 · 共 {(data?.total ?? 0).toLocaleString()} 个</span>
+            <button type="button" className="scx-btn" disabled={loading || !data || (page + 1) * PAGE >= data.total} onClick={() => setPage(page + 1)}>下一页</button>
+          </nav>
         </div>
       </div>
       {sel ? <Drawer repoKey={sel} face={face} labels={labels} runtime={status?.runtime} installed={instSet} onClose={() => setSel(null)} say={say} /> : null}

@@ -93,6 +93,7 @@ Ten purpose categories: UI, session, memory, agent, tools, models, security, dev
 ## UI and integration points
 
 - **Scout tab:** **Plugins → Scout**, contributed through `plugins.tab` (`id: dsh-plugin-scout`, `order: 40`), with search, filters (compatibility, risk, kind, installed state, copies), category chips, sorting and paging. There is no sidebar entry or separate `main` panel. The official Plugins page owns the heading; Scout adds no duplicate page title or subtitle. Scout fits the remaining viewport height: plugin results scroll independently below the category and sort controls, and overflowing filters have their own scroll area. Wheel scrolling at either area's boundary does not propagate to the page. The official **Discover** tab remains unchanged.
+- **Pagination:** 60 plugins per page; **Previous / Next** and page/total counts stay below the independently scrolling results. Changing search, filters, category or sort returns to page 1. Each page replaces the results and resets their scroll position after loading; navigation is disabled while loading. If the index shrinks, Scout returns to the last available page.
 - **Details drawer:** checklist, score breakdown, category evidence, source chain and copies, surface (cordis inserts, `client.inject`, peers), and the official pre-install check. Footer:
   - **Install / Enable / Cancel install**, as described above.
   - **Copy pinned spec:** copies `name@npmVersion`, or `github:owner/repo` when unpublished.

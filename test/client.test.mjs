@@ -218,6 +218,165 @@ test('installed bundle falls back to official Plugins when the owner openPackage
   ctx.dispose();
 });
 
+// A bounded wait observes completed renders rather than depending on a particular fetch speed.
+async function until(check, message) {
+  for (let i = 0; i < 40; i++) {
+    if (check()) return;
+    await flush(15);
+  }
+  assert.ok(check(), message);
+}
+
+// Override only this test's API and always restore it, including on an assertion failure.
+async function withPagedScout(run) {
+  const originalFetch = globalThis.fetch;
+  const ctx = mockContext();
+  const rows = Array.from({ length: 125 }, (_, i) => row(`plugin-${String(i).padStart(3, '0')}`, `owner/plugin-${i}`, 90));
+  const calls = [];
+  const pending = [];
+  let total = rows.length, rev = 1, deferNext = false, v;
+  const ok = (value) => ({ status: 200, json: async () => ({ ok: true, value }) });
+  globalThis.fetch = async (url, init = {}) => {
+    const u = new URL(url, 'http://localhost');
+    if (u.pathname === '/dsh-plugin-scout/api/status' || u.pathname === '/dsh-plugin-scout/api/refresh') {
+      if (u.pathname.endsWith('/refresh')) rev++;
+      const response = await originalFetch('/dsh-plugin-scout/api/status', init);
+      const payload = await response.json();
+      return ok({ ...payload.value, loaded: true, rev });
+    }
+    if (u.pathname !== '/dsh-plugin-scout/api/list') return originalFetch(url, init);
+    assert.equal(init.headers['x-dsh-plugin-scout'], '1');
+    assert.equal(init.credentials, 'same-origin');
+    assert.equal(init.method, 'POST');
+    const params = JSON.parse(init.body);
+    calls.push(params);
+    const offset = Number(params.offset), limit = Number(params.limit);
+    assert.equal(limit, 60, 'fixed page size, never an expanding limit');
+    const ordered = rows.slice(0, total);
+    if (params.sort === 'name') ordered.reverse();
+    const response = ok({ total, cats: { all: total, memory: total }, rows: ordered.slice(offset, offset + limit) });
+    if (deferNext) {
+      deferNext = false;
+      // Deliberately ignore cancellation: the client must invalidate late responses itself.
+      return new Promise((resolve) => pending.push(() => resolve(response)));
+    }
+    return response;
+  };
+  try {
+    client.apply(ctx);
+    const Page = ctx.registrations.find((r) => r.options.name === 'plugins.tab').component;
+    v = await render(React.createElement(Page));
+    await until(() => v.container.querySelectorAll('.scx-item').length === 60, 'first page loaded');
+    await run({
+      container: v.container, calls, pending,
+      shrink(n) { total = n; },
+      defer() { deferNext = true; },
+    });
+  } finally {
+    for (const resolve of pending) resolve();
+    if (v) await v.close();
+    ctx.dispose();
+    globalThis.fetch = originalFetch;
+  }
+}
+
+const pagination = (c) => c.querySelector('nav[aria-label="插件分页"]');
+const pageButton = (c, label) => find(pagination(c), 'button', new RegExp(`^${label}$`));
+const itemRepos = (c) => [...c.querySelectorAll('.scx-item')].map((el) => el.dataset.repo);
+
+async function goPage(c, label, status) {
+  await act(async () => pageButton(c, label).click());
+  await until(() => pagination(c).textContent.includes(status) && c.querySelectorAll('.scx-item').length > 0 && !c.querySelector('.scx-results').textContent.includes('加载中…'), `loaded ${status}`);
+}
+
+test('pagination replaces 60-row pages, bounds navigation, keeps controls outside results and resets scroll', async () => {
+  await withPagedScout(async ({ container: c, calls }) => {
+    const results = c.querySelector('.scx-results');
+    const nav = pagination(c);
+    assert.ok(nav, 'accessible bottom navigation');
+    assert.equal(results.contains(nav), false);
+    assert.ok(results.compareDocumentPosition(nav) & browser.Node.DOCUMENT_POSITION_FOLLOWING, 'navigation follows results');
+    assert.doesNotMatch(c.textContent, /再显示/);
+    assert.match(nav.textContent, /第 1 \/ 3 页 · 共 125 个/);
+    assert.equal(pageButton(c, '上一页').disabled, true);
+    assert.equal(pageButton(c, '下一页').disabled, false);
+    assert.deepEqual(itemRepos(c), Array.from({ length: 60 }, (_, i) => `owner/plugin-${i}`));
+    results.scrollTop = 350;
+    await goPage(c, '下一页', '第 2 / 3 页');
+    assert.equal(results.scrollTop, 0);
+    assert.deepEqual(itemRepos(c), Array.from({ length: 60 }, (_, i) => `owner/plugin-${i + 60}`));
+    assert.equal(pageButton(c, '上一页').disabled, false);
+    await act(async () => pageButton(c, '下一页').click());
+    await until(() => c.querySelectorAll('.scx-item').length === 5, 'last page loaded');
+    assert.deepEqual(itemRepos(c), Array.from({ length: 5 }, (_, i) => `owner/plugin-${i + 120}`));
+    assert.match(nav.textContent, /第 3 \/ 3 页 · 共 125 个/);
+    assert.equal(pageButton(c, '下一页').disabled, true);
+    const before = calls.length;
+    await act(async () => pageButton(c, '下一页').click());
+    await flush(20);
+    assert.equal(calls.length, before, 'last-page next does not fetch');
+    await goPage(c, '上一页', '第 2 / 3 页');
+    await goPage(c, '上一页', '第 1 / 3 页');
+    assert.equal(pageButton(c, '上一页').disabled, true);
+    const offsets = calls.map((p) => Number(p.offset));
+    // Initial status/revision arrival may revalidate the first page.
+    assert.deepEqual(offsets.filter((value, i) => i === 0 || value !== offsets[i - 1]), [0, 60, 120, 60, 0]);
+    assert.ok(calls.every((p) => p.limit === 60), 'requests never grow the page size');
+  });
+});
+
+test('sorting and filters reset pagination; a shrinking host total clamps and refetches the last page', async () => {
+  await withPagedScout(async ({ container: c, calls, shrink }) => {
+    await goPage(c, '下一页', '第 2 / 3 页');
+    const select = c.querySelector('select[aria-label="排序"]');
+    await act(async () => { select.value = 'name'; select.dispatchEvent(new browser.Event('change', { bubbles: true })); });
+    await until(() => calls.at(-1).sort === 'name' && itemRepos(c)[0] === 'owner/plugin-124', 'sort applied on first page');
+    assert.equal(Number(calls.at(-1).offset), 0);
+    assert.match(pagination(c).textContent, /第 1 \/ 3 页/);
+    await goPage(c, '下一页', '第 2 / 3 页');
+    await act(async () => c.querySelector('.scx-filters input[type="checkbox"]').click());
+    await until(() => Number(calls.at(-1).offset) === 0 && !pageButton(c, '下一页').disabled, 'filter reset to first page');
+    assert.match(pagination(c).textContent, /第 1 \/ 3 页/);
+    await goPage(c, '下一页', '第 2 / 3 页');
+    await act(async () => pageButton(c, '下一页').click());
+    await until(() => c.querySelectorAll('.scx-item').length === 5, 'third page loaded');
+    const before = calls.length;
+    shrink(65);
+    await act(async () => find(c, '.scx-fresh button', /^刷新$/).click());
+    await until(() => pagination(c).textContent.includes('第 2 / 2 页 · 共 65 个') && c.querySelectorAll('.scx-item').length === 5, 'clamped last page refetched');
+    assert.deepEqual(calls.slice(before).map((p) => Number(p.offset)), [120, 60]);
+    assert.deepEqual(itemRepos(c), ['owner/plugin-4', 'owner/plugin-3', 'owner/plugin-2', 'owner/plugin-1', 'owner/plugin-0']);
+    assert.equal(pageButton(c, '下一页').disabled, true);
+    assert.equal(pageButton(c, '上一页').disabled, false);
+  });
+});
+
+test('pending pages hide stale rows and disable navigation; a cancelled late reply cannot overwrite newer sorting', async () => {
+  await withPagedScout(async ({ container: c, calls, pending, defer }) => {
+    const results = c.querySelector('.scx-results');
+    results.scrollTop = 280;
+    defer();
+    await act(async () => pageButton(c, '下一页').click());
+    await until(() => pending.length === 1, 'second-page request is pending');
+    assert.equal(c.querySelectorAll('.scx-item').length, 0, 'no stale first-page rows while loading');
+    assert.match(results.textContent, /加载中…/);
+    assert.equal(pageButton(c, '上一页').disabled, true);
+    assert.equal(pageButton(c, '下一页').disabled, true);
+    assert.equal(results.scrollTop, 280, 'scroll resets on success, not before the response');
+    const select = c.querySelector('select[aria-label="排序"]');
+    await act(async () => { select.value = 'name'; select.dispatchEvent(new browser.Event('change', { bubbles: true })); });
+    await until(() => itemRepos(c)[0] === 'owner/plugin-124', 'new sorted first page loaded');
+    assert.equal(Number(calls.at(-1).offset), 0);
+    assert.equal(results.scrollTop, 0);
+    await act(async () => pending.shift()());
+    await flush(20);
+    assert.deepEqual(itemRepos(c), Array.from({ length: 60 }, (_, i) => `owner/plugin-${124 - i}`));
+    assert.match(pagination(c).textContent, /第 1 \/ 3 页 · 共 125 个/);
+    assert.equal(pageButton(c, '上一页').disabled, true);
+    assert.equal(pageButton(c, '下一页').disabled, false);
+  });
+});
+
 // 回归：真实 cordis 的 ctx 代理比 mockContext 严格——读未 inject 的属性（含嵌套服务 remote.pluginManager）会抛错，
 // 一旦在 apply 或其 effect 里抛出，fiber 进 FAILED，DSH web boot 报「dsh-plugin-scout: failed」，桌面端起不来。
 // 这里用 App 同版本的 cordis（4.0.4），按官方结构把 pluginManager 挂成独立服务 remote.pluginManager。
