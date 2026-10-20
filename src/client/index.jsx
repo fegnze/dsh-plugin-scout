@@ -1,5 +1,5 @@
 // DSH Plugin Scout — Client 半边。
-// 接缝只用公开扩展点：sidebar.panellist + main（发现页），plugins.detail.badge / plugins.detail.section（官方插件页），
+// 接缝只用公开扩展点：plugins.tab（Scout 页签），plugins.detail.badge / plugins.detail.section（官方插件页），
 // 以及官方 remote.pluginManager：listBundles / inspect（只读），installBundle（enabled:false）/ setBundleEnabled(true) / cancelInstall
 // 用于抽屉里的一键安装——与官方「添加插件」同一条路径，兼容拒装、脚本拦截、失败回滚都由官方负责。
 // 不调用 removeBundle、不写版本豁免、不碰 pnpm 与 profile 文件。
@@ -18,8 +18,8 @@ const OFFICIAL_PANEL = 'plugins';
 
 export const inject = ['slots', 'locale'];
 
-const zh = { panel: '发现插件', badge: '可信度', section: '插件发现 · 核验' };
-const en = { panel: 'Discover', badge: 'Trust', section: 'Plugin Scout · checks' };
+const zh = { panel: 'Scout', badge: '可信度', section: '插件发现 · 核验' };
+const en = { panel: 'Scout', badge: 'Trust', section: 'Plugin Scout · checks' };
 
 function optional(ctx, name) {
   try { return ctx.get?.(name); } catch { return undefined; }
@@ -111,7 +111,6 @@ export function apply(ctx) {
     } catch { return undefined; }
   }, 'scout: installed watch');
   const badges = createBadgeCache();
-  let pending;
 
   const face = {
     useInstalled: () => useSyncExternalStore(installed.subscribe, installed.get, installed.get),
@@ -129,24 +128,26 @@ export function apply(ctx) {
     } : undefined,
     /** 已安装 → 直达官方详情；否则切到官方插件页。返回实际走了哪条路。 */
     openPlugins(name) {
-      const nav = optional(ctx, 'pluginNavigation');
-      if (name && typeof nav?.openBundle === 'function') { try { nav.openBundle(name); return 'bundle'; } catch { /* fall through */ } }
       const layout = optional(ctx, 'layout');
       if (typeof layout?.selectPanel === 'function') { try { layout.selectPanel(OFFICIAL_PANEL); return 'panel'; } catch { /* none */ } }
       return 'none';
     },
-    takePending() { const p = pending; pending = undefined; return p; },
-    onPending(fn) { pendingListeners.add(fn); return () => pendingListeners.delete(fn); },
   };
-  const pendingListeners = new Set();
-  const focus = (repo) => { pending = repo; for (const l of pendingListeners) l(); };
 
-  function Page() { return <ScoutPage face={face} />; }
+  function Page({ openPackage } = {}) {
+    const tabFace = React.useMemo(() => ({
+      ...face,
+      openPlugins(name) {
+        if (name && typeof openPackage === 'function') { openPackage(name); return 'bundle'; }
+        return face.openPlugins(name);
+      },
+    }), [openPackage]);
+    return <ScoutPage face={tabFace} />;
+  }
 
-  ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_ID, locale: NS }, Page)), 'scout: page');
-  ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-    name: 'sidebar.panellist', id: PANEL_ID, order: 40, label: () => t('panel'), locale: NS,
-  }, PanelIcon)), 'scout: sidebar entry');
+  ctx.effect(() => ctx.slots.inject('plugins.tab', () => ctx.slots.register({
+    name: 'plugins.tab', id: PANEL_ID, order: 40, label: () => t('panel'), locale: NS,
+  }, Page)), 'scout: tab');
 
   const useBadge = (name) => {
     useSyncExternalStore(badges.subscribe, () => (name ? badges.get(name) : null), () => null);
@@ -163,14 +164,9 @@ export function apply(ctx) {
     const name = subject?.kind === 'bundle' ? subjectName(subject) : undefined;
     const b = useBadge(name);
     if (!b) return null;
-    const goto = () => {
-      focus(b.repo);
-      const layout = optional(ctx, 'layout');
-      try { layout?.selectPanel?.(PANEL_ID); } catch { /* optional */ }
-    };
     return (
       <section className="scx-root scx-section" data-scout-section="">
-        <h4>{t('section')}<span className="scx-badge" data-band={band(b.score)} data-risky={b.risky}>{b.score}</span><button type="button" className="scx-link" onClick={goto}>在发现页查看 →</button></h4>
+        <h4>{t('section')}<span className="scx-badge" data-band={band(b.score)} data-risky={b.risky}>{b.score}</span></h4>
         <div className="scx-ev" style={{ marginBottom: 8 }}>按包名匹配索引中的代表仓库 github.com/{b.repo}{b.npmVersion ? ` · npm 最新 ${b.npmVersion}` : ''}</div>
         <Checklist checks={b.checks} />
       </section>

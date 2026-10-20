@@ -17,7 +17,7 @@ Open the official **Plugins** page → **Add plugin**, and enter one of:
 | `dsh-plugin-scout` | Recommended. Prebuilt npm package with provenance; no install scripts, no build approval needed |
 | Absolute path of a prebuilt `dsh-plugin-scout-<version>.tgz`, if supplied with a release | Bypasses the npm registry; the current tag workflow creates release notes only and does not attach a tarball |
 
-From the CLI: `dsh plugin --profile <profile> add dsh-plugin-scout`. Enable it on the Plugins page; a **发现插件** (Discover plugins) entry appears in the sidebar.
+From the CLI: `dsh plugin --profile <profile> add dsh-plugin-scout`. Enable it on the Plugins page, then open **Plugins → Scout**. The tab is labeled **Scout** in both languages; no sidebar entry is added. The official **Discover** tab is unchanged.
 
 Do not install from `github:fegnze/dsh-plugin-scout`: a git install fetches source without `lib/`, and this repository deliberately ships no `prepare` script.
 
@@ -92,12 +92,12 @@ Ten purpose categories: UI, session, memory, agent, tools, models, security, dev
 
 ## UI and integration points
 
-- **Discover page:** sidebar **发现插件** → `main` panel with search, filters (compatibility, risk, kind, installed state, copies), category chips, sorting and paging.
+- **Scout tab:** **Plugins → Scout**, contributed through `plugins.tab` (`id: dsh-plugin-scout`, `order: 40`), with search, filters (compatibility, risk, kind, installed state, copies), category chips, sorting and paging. There is no sidebar entry or separate `main` panel. The official Plugins page owns the heading and scrolling; Scout adds no duplicate page title or subtitle. The official **Discover** tab remains unchanged.
 - **Details drawer:** checklist, score breakdown, category evidence, source chain and copies, surface (cordis inserts, `client.inject`, peers), and the official pre-install check. Footer:
   - **Install / Enable / Cancel install**, as described above.
   - **Copy pinned spec:** copies `name@npmVersion`, or `github:owner/repo` when unpublished.
-  - **Open in Plugins page / Add on Plugins page:** installed plugins open their official details via `pluginNavigation.openBundle`; others switch to the official Plugins page.
-- **Official Plugins page:** `plugins.detail.badge` (trust score) and `plugins.detail.section` (checklist plus a link back to Scout). Packages missing from the index render `null`, taking no space.
+  - **Open in Plugins page / Add on Plugins page:** installed plugins open their official details through the tab owner's `openPackage` callback; if that callback is unavailable, or the plugin is not installed, Scout switches to the official Plugins page through `layout.selectPanel('plugins')`.
+- **Official Plugins page:** `plugins.detail.badge` (trust score) and `plugins.detail.section` (checklist). There is no link from official details to Scout: no public API selects a contributed tab (`pluginNavigation` only exposes `openBundle`). Packages missing from the index render `null`, taking no space.
 
 ## Development
 

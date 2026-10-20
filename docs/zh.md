@@ -17,7 +17,7 @@
 | `dsh-plugin-scout` | 推荐。npm 预构建产物带 provenance，无安装脚本，不需要批准构建 |
 | 若发布时提供预构建的 `dsh-plugin-scout-<版本>.tgz`，填它的绝对路径 | 不经 npm 注册表；当前 tag 工作流只创建发布说明，不附带 tarball |
 
-命令行：`dsh plugin --profile <profile> add dsh-plugin-scout`。装好后在插件页启用，侧栏会出现「发现插件」。
+命令行：`dsh plugin --profile <profile> add dsh-plugin-scout`。装好后在插件页启用，再打开「插件 → Scout」（Plugins → Scout）。中英文页签名称均为 **Scout**，不新增侧栏入口，官方「发现」页签保持不变。
 
 不要用 `github:fegnze/dsh-plugin-scout` 安装：git 安装拿到的是源码，没有 `lib/`，本仓库也不提供 `prepare` 脚本。
 
@@ -93,12 +93,12 @@ https://fegnze.github.io/dsh-plugin-scout/index.json
 
 ## 界面与接缝
 
-- **发现页**：侧栏「发现插件」→ `main` 面板，内容包括搜索、筛选（兼容、风险、形态、安装状态、副本）、分类条、排序和分页。
+- **Scout 页签**：「插件 → Scout」，通过 `plugins.tab` 注册（`id: dsh-plugin-scout`、`order: 40`），内容包括搜索、筛选（兼容、风险、形态、安装状态、副本）、分类条、排序和分页。不新增侧栏入口或独立 `main` 面板；页面标题与滚动由官方插件页管理，Scout 不重复显示页面标题或副标题。官方「发现」页签保持不变。
 - **详情抽屉**：核验清单、评分构成、分类依据、来源链与副本、作用面（cordis 插入、`client.inject`、peer），以及官方预检。底部按钮：
   - **安装 / 启用 / 取消安装**：见上文。
   - **复制锁定规格**：复制 `name@npmVersion`；未发布的复制 `github:owner/repo`。
-  - **在插件页打开 / 去插件页添加**：已安装的通过官方 `pluginNavigation.openBundle` 直达详情；未安装的切到官方插件页，粘贴规格即可添加。
-- **官方插件页**：`plugins.detail.badge`（可信度分数）、`plugins.detail.section`（核验清单，以及「在发现页查看 →」）。索引里没有的包返回 `null`，不占位。
+  - **在插件页打开 / 去插件页添加**：已安装的通过官方页签所有者传入的 `openPackage` 回调直达详情；回调不可用或尚未安装时，通过 `layout.selectPanel('plugins')` 切到官方插件页。
+- **官方插件页**：`plugins.detail.badge`（可信度分数）、`plugins.detail.section`（核验清单）。官方详情不提供跳转 Scout 的链接：目前没有选择扩展页签的公开 API（`pluginNavigation` 只有 `openBundle`）。索引里没有的包返回 `null`，不占位。
 
 ## 开发
 

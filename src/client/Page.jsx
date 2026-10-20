@@ -32,12 +32,6 @@ export function ScoutPage({ face }) {
     try { setStatus(await api.status()); setError(null); } catch (e) { setError(e.message); }
   }, []);
   useEffect(() => { void loadStatus(); }, [loadStatus]);
-  // 从官方插件页「在发现页查看」跳过来：打开对应抽屉。
-  useEffect(() => {
-    const take = () => { const p = face.takePending?.(); if (p) setSel(p); };
-    take();
-    return face.onPending?.(take);
-  }, [face]);
   // 索引后台加载中或刷新进行中轮询状态；status.rev 每次发布都会变，列表随之重拉（边抓边看）。
   const busy = !!status && (status.running || !status.loaded);
   useEffect(() => {
@@ -71,8 +65,6 @@ export function ScoutPage({ face }) {
   return (
     <div className="scx-root scx-page" data-scout-page="">
       <div className="scx-top">
-        <h1>发现插件</h1>
-        <span className="scx-sub">来源：GitHub topic:dsh-plugin + npm · 只核验，不安装</span>
         <div className="scx-search">
           <span aria-hidden="true">⌕</span>
           <input aria-label="搜索插件" placeholder="名称、描述、仓库、分类" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />

@@ -50,7 +50,7 @@ function mockContext(services = {}) {
   return {
     registrations,
     effect(fn) { const d = fn(); effects.push(d); return d; },
-    locale: { register: () => () => {}, bind: () => (k) => k },
+    locale: { register: () => () => {}, bind: () => (k) => k === 'panel' ? 'Scout' : k },
     slots: {
       inject(name, fn) { const d = fn(); effects.push(d); return d; },
       register(options, component) { const e = { options, component, active: true }; registrations.push(e); return () => { e.active = false; }; },
@@ -71,13 +71,15 @@ async function render(element) {
 const flush = (ms = 60) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
 const find = (c, sel, re) => [...c.querySelectorAll(sel)].find((el) => re.test(el.textContent));
 
-test('registers exactly the public seams: page, sidebar entry, official badge + section', () => {
+test('registers exactly the public seams: Scout tab, official badge + section, no sidebar or main panel', () => {
   const ctx = mockContext();
   client.apply(ctx);
   const names = ctx.registrations.map((r) => r.options.name).sort();
-  assert.deepEqual(names, ['main', 'plugins.detail.badge', 'plugins.detail.section', 'sidebar.panellist']);
-  assert.equal(ctx.registrations.find((r) => r.options.name === 'main').options.key, ID);
-  assert.equal(ctx.registrations.find((r) => r.options.name === 'sidebar.panellist').options.id, ID);
+  assert.deepEqual(names, ['plugins.detail.badge', 'plugins.detail.section', 'plugins.tab']);
+  const tab = ctx.registrations.find((r) => r.options.name === 'plugins.tab');
+  assert.equal(tab.options.id, ID);
+  assert.equal(tab.options.order, 40);
+  assert.equal(typeof tab.options.label === 'function' ? tab.options.label() : tab.options.label, 'Scout');
   assert.deepEqual([...client.inject], ['slots', 'locale']);
   ctx.dispose();
   assert.equal(ctx.registrations.some((r) => r.active), false);
@@ -117,6 +119,8 @@ test('official detail slots: render for an indexed bundle, null for unknown/item
   assert.match(v.container.querySelector('.scx-badge').textContent, /badge 92/);
   assert.equal(v.container.querySelectorAll('[data-scout-section]').length, 1);
   assert.match(v.container.querySelector('[data-scout-section]').textContent, /安装钩子/);
+  assert.doesNotMatch(v.container.querySelector('[data-scout-section]').textContent, /在发现页查看/);
+  assert.equal(v.container.querySelector('[data-scout-section] button, [data-scout-section] a'), null, 'official detail offers no unsupported link to select the Scout tab');
   assert.equal(v.container.querySelector('#sep').nextSibling, null, 'unknown bundle and item subjects render nothing');
   const badgeCalls = requests.filter((r) => r.url.endsWith('/api/badges'));
   assert.equal(badgeCalls.length, 1, 'lookups batched into one request');
@@ -132,13 +136,15 @@ test('page → drawer: lists, inspects through official pluginManager, risky cop
     inspect: async (spec) => { inspected.push(spec); return { ok: true, value: { status: 'accepted', kind: 'registry', name: 'alpha', version: '1.0.0', bundle: true, registry: 'https://registry.npmjs.org/' } }; },
     installBundle: () => assert.fail('installed plugin: no install'), removeBundle: () => assert.fail('never remove'), setBundleEnabled: () => assert.fail('never toggle without a click'),
   };
-  const ctx = mockContext({ remote: { $on: () => () => {} }, 'remote.pluginManager': pm, pluginNavigation: { openBundle: (n) => opened.push(['bundle', n]) }, layout: { selectPanel: (p) => opened.push(['panel', p]) } });
+  const ctx = mockContext({ remote: { $on: () => () => {} }, 'remote.pluginManager': pm, pluginNavigation: { openBundle: () => assert.fail('embedded tab must use its owner openPackage callback') }, layout: { selectPanel: (p) => opened.push(['panel', p]) } });
   client.apply(ctx);
-  const Page = ctx.registrations.find((r) => r.options.name === 'main').component;
-  const v = await render(React.createElement(Page));
+  const Page = ctx.registrations.find((r) => r.options.name === 'plugins.tab').component;
+  const v = await render(React.createElement(Page, { openPackage: (name) => opened.push(['package', name]) }));
   await flush();
   const items = v.container.querySelectorAll('.scx-item');
   assert.equal(items.length, 2);
+  assert.equal(v.container.querySelector('h1'), null, 'official Plugins page owns the page heading');
+  assert.equal(v.container.querySelector('.scx-top h1, .scx-sub'), null, 'embedded tab has no duplicate page title or subtitle');
   assert.match(items[0].textContent, /alpha/);
   assert.match(items[0].textContent, /已安装/, 'installed state comes from official listBundles');
 
@@ -155,7 +161,7 @@ test('page → drawer: lists, inspects through official pluginManager, risky cop
   await flush(10);
   assert.deepEqual(copied, ['alpha@1.0.0']);
   await act(async () => find(drawer, 'button', /在插件页打开/).click());
-  assert.deepEqual(opened, [['bundle', 'alpha']]);
+  assert.deepEqual(opened, [['package', 'alpha']], 'installed bundle navigation goes through the official tab owner');
   await act(async () => drawer.querySelector('[aria-label="关闭"]').click());
 
   await act(async () => v.container.querySelectorAll('.scx-item')[1].click());
@@ -172,6 +178,21 @@ test('page → drawer: lists, inspects through official pluginManager, risky cop
   assert.deepEqual(opened.at(-1), ['panel', 'plugins'], 'not installed → official Plugins page, where the user pastes the spec');
   assert.ok(find(d2, 'button', /^安装$/), 'one-click install offered next to the fallback');
 
+  await v.close();
+  ctx.dispose();
+});
+
+test('installed bundle falls back to official Plugins when the owner openPackage callback is unavailable', async () => {
+  const opened = [];
+  const ctx = mockContext({
+    'remote.pluginManager': { listBundles: async () => ({ ok: true, value: [{ name: 'alpha', installed: true }] }) },
+    pluginNavigation: { openBundle: () => assert.fail('do not use pluginNavigation as a substitute tab owner') },
+    layout: { selectPanel: (panel) => opened.push(panel) },
+  });
+  client.apply(ctx);
+  const { v, drawer } = await openDrawer(ctx, 0);
+  await act(async () => find(drawer, 'button', /在插件页打开/).click());
+  assert.deepEqual(opened, ['plugins']);
   await v.close();
   ctx.dispose();
 });
@@ -194,7 +215,7 @@ test('activates under real cordis with and without the official remote.pluginMan
     root.plugin(class extends Service {
       constructor(ctx) { super(ctx, 'locale'); }
       register() { return () => {}; }
-      bind() { return (k) => k; }
+      bind() { return (k) => k === 'panel' ? 'Scout' : k; }
     });
     if (withRemote) {
       root.plugin(class extends Service { constructor(ctx) { super(ctx, 'remote'); } $on() { return () => {}; } });
@@ -210,7 +231,7 @@ test('activates under real cordis with and without the official remote.pluginMan
     await fiber;
     await tick();
     assert.equal(fiber.state, 2, `fiber ACTIVE (withRemote=${withRemote}), not FAILED`);
-    assert.deepEqual(seen.sort(), ['main', 'plugins.detail.badge', 'plugins.detail.section', 'sidebar.panellist']);
+    assert.deepEqual(seen.sort(), ['plugins.detail.badge', 'plugins.detail.section', 'plugins.tab']);
     await fiber.dispose();
     void listed;
   }
@@ -220,7 +241,7 @@ test('activates under real cordis with and without the official remote.pluginMan
 test('without the official pluginManager the page still works and inspect is hidden', async () => {
   const ctx = mockContext();
   client.apply(ctx);
-  const Page = ctx.registrations.find((r) => r.options.name === 'main').component;
+  const Page = ctx.registrations.find((r) => r.options.name === 'plugins.tab').component;
   const v = await render(React.createElement(Page));
   await flush();
   await act(async () => v.container.querySelector('.scx-item').click());
@@ -254,7 +275,7 @@ function fakeManager(script) {
 }
 
 async function openDrawer(ctx, index) {
-  const Page = ctx.registrations.find((r) => r.options.name === 'main').component;
+  const Page = ctx.registrations.find((r) => r.options.name === 'plugins.tab').component;
   const v = await render(React.createElement(Page));
   await flush();
   await act(async () => v.container.querySelectorAll('.scx-item')[index].click());
