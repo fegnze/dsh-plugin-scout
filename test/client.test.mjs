@@ -85,7 +85,7 @@ test('registers exactly the public seams: Scout tab, official badge + section, n
   assert.equal(ctx.registrations.some((r) => r.active), false);
 });
 
-test('stylesheet is owned before insertion and removed on dispose; no host bg aliases or dialog role', () => {
+test('stylesheet is owned, theme-aligned and responsive; removed on dispose', () => {
   const insert = document.head.appendChild.bind(document.head);
   let checked = false;
   document.head.appendChild = (node) => {
@@ -98,6 +98,11 @@ test('stylesheet is owned before insertion and removed on dispose; no host bg al
   const css = document.querySelector('style[data-scout]').textContent;
   assert.match(css, /--dsw-alias-/);
   assert.match(css, /body\[data-ds-dark-theme\]/);
+  assert.match(css, /--scx-tile:\s*var\(--dsw-alias-bg-layer-1\)/);
+  assert.match(css, /input::placeholder\s*\{[^}]*var\(--scx-ink4\)/);
+  assert.match(css, /\.scx-search:focus-within/);
+  assert.match(css, /@media\s*\(max-width:\s*720px\)/);
+  assert.doesNotMatch(css, /max-width:\s*420px/, 'search expands with the official page toolbar');
   assert.doesNotMatch(css, /`/, 'no backticks inside the CSS payload');
   for (const bad of ['card', 'bubble', 'pill', 'banner', 'panel']) assert.doesNotMatch(css, new RegExp(`\\.scx-[\\w-]*${bad}`), `class name avoids host skin substring "${bad}"`);
   ctx.dispose();
@@ -143,6 +148,12 @@ test('page → drawer: lists, inspects through official pluginManager, risky cop
   await flush();
   const items = v.container.querySelectorAll('.scx-item');
   assert.equal(items.length, 2);
+  const search = v.container.querySelector('.scx-search input');
+  assert.equal(search.type, 'search');
+  assert.equal(search.placeholder, '搜索插件');
+  assert.equal(search.title, '名称、描述、仓库、分类');
+  assert.ok(v.container.querySelector('.scx-search svg[aria-hidden="true"]'));
+  assert.doesNotMatch(v.container.querySelector('.scx-search').textContent, /⌕/);
   assert.equal(v.container.querySelector('h1'), null, 'official Plugins page owns the page heading');
   assert.equal(v.container.querySelector('.scx-top h1, .scx-sub'), null, 'embedded tab has no duplicate page title or subtitle');
   assert.match(items[0].textContent, /alpha/);

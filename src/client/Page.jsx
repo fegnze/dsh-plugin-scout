@@ -66,8 +66,8 @@ export function ScoutPage({ face }) {
     <div className="scx-root scx-page" data-scout-page="">
       <div className="scx-top">
         <div className="scx-search">
-          <span aria-hidden="true">⌕</span>
-          <input aria-label="搜索插件" placeholder="名称、描述、仓库、分类" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
+          <svg className="scx-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5" stroke="currentColor" strokeWidth="1.5" /><path d="m16 16 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          <input type="search" aria-label="搜索插件" placeholder="搜索插件" title="名称、描述、仓库、分类" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
         </div>
         <div className="scx-fresh">
           <span title={status?.runtimeSource}>运行时 {status?.runtime ?? '…'}</span>
