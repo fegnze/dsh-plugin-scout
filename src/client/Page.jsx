@@ -15,7 +15,8 @@ export function ScoutPage({ face }) {
   const [error, setError] = useState(null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('all');
-  const [sort, setSort] = useState('score');
+  const [sort, setSort] = useState('stars');
+  const [jumpPage, setJumpPage] = useState('');
   const [compat, setCompat] = useState([]);
   const [flags, setFlags] = useState([]);
   const [inst, setInst] = useState('all');
@@ -172,6 +173,16 @@ export function ScoutPage({ face }) {
             <button type="button" className="scx-btn" disabled={loading || !data || page === 0} onClick={() => setPage(page - 1)}>上一页</button>
             <span role="status" aria-live="polite">第 {page + 1} / {Math.max(1, Math.ceil((data?.total ?? 0) / PAGE))} 页 · 共 {(data?.total ?? 0).toLocaleString()} 个</span>
             <button type="button" className="scx-btn" disabled={loading || !data || (page + 1) * PAGE >= data.total} onClick={() => setPage(page + 1)}>下一页</button>
+            <form className="scx-jump" onSubmit={(event) => {
+              event.preventDefault();
+              const target = Number(jumpPage);
+              if (loading || !data || !Number.isInteger(target) || target < 1 || target > Math.ceil(data.total / PAGE)) return;
+              setPage(target - 1);
+              setJumpPage('');
+            }}>
+              <label>跳至 <input type="number" aria-label="跳转页码" min="1" max={Math.max(1, Math.ceil((data?.total ?? 0) / PAGE))} step="1" required value={jumpPage} disabled={loading || !data || !data.total} onChange={(event) => setJumpPage(event.target.value)} /> 页</label>
+              <button type="submit" className="scx-btn" disabled={loading || !data || !Number.isInteger(Number(jumpPage)) || Number(jumpPage) < 1 || Number(jumpPage) > Math.ceil(data.total / PAGE)}>跳转</button>
+            </form>
           </nav>
         </div>
       </div>

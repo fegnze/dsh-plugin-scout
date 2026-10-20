@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { Window } from 'happy-dom';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Simulate } from 'react-dom/test-utils';
 
 const require = createRequire(import.meta.url);
 const browser = new Window({ url: 'http://localhost/' });
@@ -322,6 +323,23 @@ test('pagination replaces 60-row pages, bounds navigation, keeps controls outsid
     // Initial status/revision arrival may revalidate the first page.
     assert.deepEqual(offsets.filter((value, i) => i === 0 || value !== offsets[i - 1]), [0, 60, 120, 60, 0]);
     assert.ok(calls.every((p) => p.limit === 60), 'requests never grow the page size');
+    assert.ok(calls.every((p) => p.sort === 'stars'), 'default query sorts by stars');
+    assert.equal(c.querySelector('select[aria-label="排序"]').value, 'stars');
+    const jump = c.querySelector('input[aria-label="跳转页码"]');
+    const form = jump.closest('form');
+    const nativeSet = Object.getOwnPropertyDescriptor(browser.HTMLInputElement.prototype, 'value').set;
+    for (const value of ['0', '4', '1.5', '']) {
+      await act(async () => { nativeSet.call(jump, value); Simulate.change(jump); });
+      const count = calls.length;
+      await act(async () => form.dispatchEvent(new browser.Event('submit', { bubbles: true, cancelable: true })));
+      await flush(10);
+      assert.equal(calls.length, count, `invalid page ${value} never fetches`);
+    }
+    await act(async () => { nativeSet.call(jump, '3'); Simulate.change(jump); });
+    await act(async () => form.dispatchEvent(new browser.Event('submit', { bubbles: true, cancelable: true })));
+    await until(() => itemRepos(c).length === 5, 'direct jump to last page');
+    assert.equal(calls.at(-1).offset, 120);
+    assert.equal(jump.value, '');
   });
 });
 

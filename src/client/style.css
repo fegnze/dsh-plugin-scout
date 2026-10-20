@@ -83,6 +83,10 @@ body[data-ds-dark-theme] .scx-root {
 .scx-empty { padding: 56px 0; text-align: center; color: var(--scx-ink3); }
 .scx-pagination { display: flex; flex-shrink: 0; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; padding: 12px 0 0; border-top: 1px solid var(--scx-hair); }
 .scx-pagination span { color: var(--scx-ink3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.scx-jump { display: flex; align-items: center; gap: 8px; }
+.scx-jump label { display: flex; align-items: center; gap: 6px; color: var(--scx-ink3); font-size: 12px; }
+.scx-jump input { width: 64px; min-height: 32px; padding: 4px 8px; border: 1px solid var(--scx-hair); border-radius: 8px; background: var(--scx-tile); color: var(--scx-ink1); font: inherit; }
+.scx-jump input:focus-visible { outline: 2px solid var(--scx-info); outline-offset: 2px; }
 .scx-note { border: 1px solid var(--scx-hair); border-radius: 9px; padding: 10px 12px; margin-bottom: 10px; color: var(--scx-ink2); font-size: 12px; }
 .scx-note[data-tone="bad"] { border-color: var(--scx-bad); color: var(--scx-bad); }
 .scx-progress { height: 3px; background: var(--scx-hair); border-radius: 2px; overflow: hidden; margin-top: 6px; }
