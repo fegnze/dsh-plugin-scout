@@ -103,6 +103,10 @@ test('stylesheet is owned, theme-aligned and responsive; removed on dispose', ()
   assert.match(css, /\.scx-search:focus-within/);
   assert.match(css, /@media\s*\(max-width:\s*720px\)/);
   assert.doesNotMatch(css, /max-width:\s*420px/, 'search expands with the official page toolbar');
+  assert.match(css, /\.scx-results\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(css, /\.scx-results\s*\{[^}]*overscroll-behavior-y:\s*contain/);
+  assert.match(css, /\.scx-filters\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(css, /\.scx-list\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/);
   assert.doesNotMatch(css, /`/, 'no backticks inside the CSS payload');
   for (const bad of ['card', 'bubble', 'pill', 'banner', 'panel']) assert.doesNotMatch(css, new RegExp(`\\.scx-[\\w-]*${bad}`), `class name avoids host skin substring "${bad}"`);
   ctx.dispose();
@@ -148,6 +152,12 @@ test('page → drawer: lists, inspects through official pluginManager, risky cop
   await flush();
   const items = v.container.querySelectorAll('.scx-item');
   assert.equal(items.length, 2);
+  const results = v.container.querySelector('[role="region"][aria-label="插件列表"]');
+  assert.ok(results.contains(items[0]));
+  assert.equal(results.tabIndex, 0, 'list is keyboard-scrollable');
+  assert.equal(results.contains(v.container.querySelector('.scx-cats')), false);
+  assert.equal(results.contains(v.container.querySelector('.scx-lhead')), false);
+  assert.ok(Number.parseFloat(v.container.querySelector('[data-scout-page]').style.height) >= 0);
   const search = v.container.querySelector('.scx-search input');
   assert.equal(search.type, 'search');
   assert.equal(search.placeholder, '搜索插件');

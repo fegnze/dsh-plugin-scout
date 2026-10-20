@@ -93,7 +93,7 @@ https://fegnze.github.io/dsh-plugin-scout/index.json
 
 ## 界面与接缝
 
-- **Scout 页签**：「插件 → Scout」，通过 `plugins.tab` 注册（`id: dsh-plugin-scout`、`order: 40`），内容包括搜索、筛选（兼容、风险、形态、安装状态、副本）、分类条、排序和分页。不新增侧栏入口或独立 `main` 面板；页面标题与滚动由官方插件页管理，Scout 不重复显示页面标题或副标题。官方「发现」页签保持不变。
+- **Scout 页签**：「插件 → Scout」，通过 `plugins.tab` 注册（`id: dsh-plugin-scout`、`order: 40`），内容包括搜索、筛选（兼容、风险、形态、安装状态、副本）、分类条、排序和分页。不新增侧栏入口或独立 `main` 面板；页面标题由官方插件页管理，Scout 不重复显示页面标题或副标题。Scout 适配窗口剩余高度，分类与排序下方的插件结果独立滚动；左侧筛选超出高度时也单独滚动，滚动到边界不会继续带动整页。官方「发现」页签保持不变。
 - **详情抽屉**：核验清单、评分构成、分类依据、来源链与副本、作用面（cordis 插入、`client.inject`、peer），以及官方预检。底部按钮：
   - **安装 / 启用 / 取消安装**：见上文。
   - **复制锁定规格**：复制 `name@npmVersion`；未发布的复制 `github:owner/repo`。

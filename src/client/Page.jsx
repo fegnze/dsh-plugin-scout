@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api.js';
 import { ago, band, progressRatio, progressText, rowTags } from './view.js';
 import { Drawer } from './Drawer.jsx';
@@ -25,6 +25,30 @@ export function ScoutPage({ face }) {
   const [toast, setToast] = useState(null);
   const installed = face.useInstalled();
   const seq = useRef(0);
+  const pageRef = useRef(null);
+  const [pageHeight, setPageHeight] = useState(null);
+
+  // Measure only our own seat; never query or restyle the official page's DOM.
+  useLayoutEffect(() => {
+    const node = pageRef.current;
+    const viewport = window.visualViewport;
+    const measure = () => {
+      const top = node.getBoundingClientRect().top;
+      const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
+      const height = Math.max(0, Math.floor(bottom - top - 24));
+      setPageHeight((previous) => previous === height ? previous : height);
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    observer?.observe(node);
+    window.addEventListener('resize', measure);
+    viewport?.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+      viewport?.removeEventListener('resize', measure);
+    };
+  }, []);
 
   const say = useCallback((text) => { setToast(text); clearTimeout(say.h); say.h = setTimeout(() => setToast(null), 2200); }, []);
 
@@ -63,7 +87,7 @@ export function ScoutPage({ face }) {
 
   const empty = status && status.loaded && !status.crawledAt && !status.running && !status.repos;
   return (
-    <div className="scx-root scx-page" data-scout-page="">
+    <div ref={pageRef} className="scx-root scx-page" data-scout-page="" style={pageHeight === null ? undefined : { height: pageHeight }}>
       <div className="scx-top">
         <div className="scx-search">
           <svg className="scx-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5" stroke="currentColor" strokeWidth="1.5" /><path d="m16 16 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
@@ -120,6 +144,7 @@ export function ScoutPage({ face }) {
               <option value="score">可信度</option><option value="stars">star</option><option value="recent">最近推送</option><option value="name">名称</option>
             </select>
           </div>
+          <div className="scx-results" role="region" aria-label="插件列表" tabIndex={0}>
           {data && !data.rows.length && !empty ? <div className="scx-empty">没有符合条件的插件。放宽左侧筛选，或换个关键词。</div> : null}
           {data?.rows.map((r) => (
             <button type="button" key={r.repo} className="scx-item" aria-current={sel === r.repo} data-repo={r.repo} onClick={() => setSel(r.repo)}>
@@ -133,6 +158,7 @@ export function ScoutPage({ face }) {
             </button>
           ))}
           {data && data.rows.length < data.total ? <div className="scx-more"><button type="button" className="scx-btn" onClick={() => setLimit(limit + PAGE)}>再显示 {Math.min(PAGE, data.total - data.rows.length)} 个</button></div> : null}
+          </div>
         </div>
       </div>
       {sel ? <Drawer repoKey={sel} face={face} labels={labels} runtime={status?.runtime} installed={instSet} onClose={() => setSel(null)} say={say} /> : null}
