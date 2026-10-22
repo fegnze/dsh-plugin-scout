@@ -33,14 +33,14 @@ globalThis.fetch = async (url, init = {}) => {
   assert.equal(init.headers['x-dsh-plugin-scout'], '1', 'intent header on every call');
   assert.equal(init.credentials, 'same-origin');
   const u = new URL(url, 'http://localhost');
-  if (u.pathname === '/dsh-plugin-scout/api/auth') return ok({ configured: true, source: 'test', writable: true, stored: false, storage: 'credentials' });
-  if (u.pathname === '/dsh-plugin-scout/api/status') return ok({ running: false, crawledAt: '2026-10-13T00:00:00Z', fullAt: '2026-10-13T00:00:00Z', runtime: '0.2.0-rc.2', runtimeSource: 'test', repos: 19000, error: null, categories: { memory: '记忆', ui: '界面' }, facets: { compat: { ok: 2 }, flags: {}, copies: 0 } });
-  if (u.pathname === '/dsh-plugin-scout/api/list') return ok({ total: ROWS.length, cats: { all: 2, memory: 2 }, rows: ROWS });
-  if (u.pathname === '/dsh-plugin-scout/api/detail') {
+  if (u.pathname === '/api/dsh-plugin-scout/api/auth') return ok({ configured: true, source: 'test', writable: true, stored: false, storage: 'credentials' });
+  if (u.pathname === '/api/dsh-plugin-scout/api/status') return ok({ running: false, crawledAt: '2026-10-13T00:00:00Z', fullAt: '2026-10-13T00:00:00Z', runtime: '0.2.0-rc.2', runtimeSource: 'test', repos: 19000, error: null, categories: { memory: '记忆', ui: '界面' }, facets: { compat: { ok: 2 }, flags: {}, copies: 0 } });
+  if (u.pathname === '/api/dsh-plugin-scout/api/list') return ok({ total: ROWS.length, cats: { all: 2, memory: 2 }, rows: ROWS });
+  if (u.pathname === '/api/dsh-plugin-scout/api/detail') {
     const r = ROWS.find((x) => x.repo === u.searchParams.get('key'));
     return ok({ ...r, checks: CHECKS, cats: [{ id: 'memory', score: 5, evidence: ['memory'] }], inserts: [], clientInject: [], compatPeers: {}, depCount: 1, copiesList: [] });
   }
-  if (u.pathname === '/dsh-plugin-scout/api/badges') {
+  if (u.pathname === '/api/dsh-plugin-scout/api/badges') {
     const { names } = JSON.parse(init.body);
     return ok(Object.fromEntries(names.filter((n) => n === 'alpha').map((n) => [n, { repo: 'o/alpha', score: 92, risky: false, npmVersion: '1.0.0', checks: CHECKS }])));
   }
@@ -286,13 +286,13 @@ async function withPagedScout(run, { polling = false } = {}) {
   const ok = (value) => ({ status: 200, json: async () => ({ ok: true, value }) });
   globalThis.fetch = async (url, init = {}) => {
     const u = new URL(url, 'http://localhost');
-    if (u.pathname === '/dsh-plugin-scout/api/status' || u.pathname === '/dsh-plugin-scout/api/refresh') {
+    if (u.pathname === '/api/dsh-plugin-scout/api/status' || u.pathname === '/api/dsh-plugin-scout/api/refresh') {
       if (u.pathname.endsWith('/refresh')) rev++;
-      const response = await originalFetch('/dsh-plugin-scout/api/status', init);
+      const response = await originalFetch('/api/dsh-plugin-scout/api/status', init);
       const payload = await response.json();
       return ok({ ...payload.value, loaded: true, running, rev });
     }
-    if (u.pathname !== '/dsh-plugin-scout/api/list') return originalFetch(url, init);
+    if (u.pathname !== '/api/dsh-plugin-scout/api/list') return originalFetch(url, init);
     assert.equal(init.headers['x-dsh-plugin-scout'], '1');
     assert.equal(init.credentials, 'same-origin');
     assert.equal(init.method, 'POST');

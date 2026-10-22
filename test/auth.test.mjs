@@ -2,7 +2,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import { createAuth, TOKEN_REF } from '../src/auth.mjs';
-import { createHandler, PREFIX } from '../src/host.mjs';
+import { createHandler, registerScoutRoutes, PREFIX } from '../src/host.mjs';
+test('shared carrier adapter preserves intent fence and streaming credential limits', async () => {
+  const routes = new Map(); const { auth } = setup();
+  const dispose = registerScoutRoutes({ fetch: { register(route) { assert.ok(route.path.startsWith('/api/')); routes.set(route.path, route); return () => routes.delete(route.path); } } }, { status: () => ({ loaded: true }) }, auth);
+  const route = routes.get(`${PREFIX}/api/auth`);
+  assert.equal(route.requestBody, 'streaming');
+  const call = (body, intent = true) => route.fetch(new Request(`http://desktop${route.path}`, { method: 'POST', headers: intent ? { 'x-dsh-plugin-scout': '1' } : {}, body }));
+  assert.equal((await call(JSON.stringify({ action: 'save', token: secret }), false)).status, 403);
+  assert.equal((await call('x'.repeat(9000))).status, 413);
+  const saved = await call(JSON.stringify({ action: 'save', token: secret })); assert.equal(saved.status, 200); assert.equal((await saved.json()).value.stored, true);
+  const status = await routes.get(`${PREFIX}/api/status`).fetch(new Request(`http://desktop${PREFIX}/api/status`, { headers: { 'x-dsh-plugin-scout': '1' } }));
+  assert.equal((await status.json()).value.loaded, true);
+  dispose(); assert.equal(routes.size, 0);
+});
 const secret = 'ghp_PRIVATE_TEST_TOKEN_123456789';
 function setup(fetch = async () => ({ ok: true, status: 200, json: async () => ({ data: { rateLimit: { remaining: 100 } } }) })) {
   let value; const writes = [];

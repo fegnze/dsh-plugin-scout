@@ -131,7 +131,7 @@ Automatic refresh has been manually accepted in the live DSH application. UI pos
 
 ## Security boundaries
 
-- Routes live on DSH's own webServer (`/dsh-plugin-scout/api/*`). Every request must carry the custom header `x-dsh-plugin-scout: 1` and pass DSH `connection.admit` (Host/Origin fence plus browser auth). Without the `connection` service, requests are refused (fail closed).
+- Exact routes use official `connection.fetch` under `/api/dsh-plugin-scout/api/*`, shared by desktop and Web carriers. The carrier authenticates requests and refuses non-owner peers before dispatch; Scout additionally requires `x-dsh-plugin-scout: 1`. No independent loopback server or auth-token copying is used. The `connection` service is required.
 - `cordis.patch.yml` is scanned for `name:` with a regex; YAML tags are never parsed. Crawled code is never executed and tarballs are never downloaded.
 - Style tags carry `data-plugin` / `data-plugin-css` before entering the DOM. Only `--dsw-alias-*` tokens are used; class names avoid substrings that host skins target; the drawer does not use `role="dialog"`.
 

@@ -1,5 +1,5 @@
 // 同源接口：Host 半边挂在 DSH 自己的 webServer 上，界面从不连第二个端口。
-export const PREFIX = '/dsh-plugin-scout';
+export const PREFIX = '/api/dsh-plugin-scout';
 
 async function call(path, init = {}) {
   const res = await fetch(`${PREFIX}${path}`, {

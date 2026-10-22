@@ -3,6 +3,7 @@
 // 边界：不安装、不卸载、不启用任何插件（那是官方插件页的事）；不起常驻进程，子进程只用于 `gh auth token`，走 subprocess 服务。
 import { createAuth } from './auth.mjs';
 import { homedir } from 'node:os';
+import { Readable } from 'node:stream';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { canonicalGithubSlug, crawlRepos, createGithub, npmLatest, pool } from './core/crawl.mjs';
@@ -11,9 +12,9 @@ import { CATEGORIES } from './core/classify.mjs';
 import { installSpec } from './core/verify.mjs';
 
 export const name = 'dsh-plugin-scout';
-export const inject = ['webServer', 'subprocess'];
+export const inject = ['connection', 'subprocess'];
 
-export const PREFIX = '/dsh-plugin-scout';
+export const PREFIX = '/api/dsh-plugin-scout';
 const DAY = 86_400_000;
 const NPM_TTL = DAY;
 const AUTO_DELAY = 45_000;
@@ -439,6 +440,25 @@ export function createHandler(scout, { admit, auth }) {
   };
 }
 
+/** Only register behind connection.fetch: the shared carrier authenticates owner peers. */
+export function registerScoutRoutes(connection, scout, auth) {
+  const handler = createHandler(scout, { auth, admit: () => ({ peer: { principal: { kind: 'owner' } } }) });
+  const endpoints = { status: ['GET'], list: ['POST'], detail: ['GET'], badges: ['POST'], refresh: ['POST'], auth: ['GET', 'POST'] };
+  const disposers = Object.entries(endpoints).map(([endpoint, methods]) => connection.fetch.register({
+    path: `${PREFIX}/api/${endpoint}`, methods, requestBody: 'streaming',
+    async fetch(request) {
+      const req = request.body ? Readable.fromWeb(request.body) : Readable.from([]);
+      req.method = request.method;
+      req.url = request.url;
+      req.headers = Object.fromEntries(request.headers);
+      let status = 500, headers = {}, body = '';
+      await handler(req, { writeHead(s, h) { status = s; headers = h; }, end(b) { body = b; } });
+      return new Response(body, { status, headers });
+    },
+  }));
+  return () => { for (const dispose of disposers.reverse()) dispose(); };
+}
+
 export async function apply(ctx, config = {}) {
   const dataDir = config.dataDir || join(homedir(), '.dsh', 'dsh-plugin-scout');
   const runtime = await resolveRuntime(config);
@@ -447,12 +467,8 @@ export async function apply(ctx, config = {}) {
   const scout = createScout({ file: join(dataDir, 'index.json'), topic: config.topic, runtime, getToken: () => auth.resolve(), log });
   // 不在激活路径上读 30MB 索引：后台加载，界面先拿到 loaded:false 再自行轮询。
   scout.load().catch((e) => ctx.logger?.warn?.(`[scout] index unreadable, starting empty: ${e.message}`));
-  const admit = (req) => {
-    const connection = ctx.get?.('connection');
-    return typeof connection?.admit === 'function' ? connection.admit(req) : undefined;
-  };
   ctx.effect(() => {
-    const dispose = ctx.webServer.register({ kind: 'prefix', path: PREFIX, handler: createHandler(scout, { admit, auth }) });
+    const dispose = registerScoutRoutes(ctx.connection ?? ctx.get?.('connection'), scout, auth);
     // 进程内定时：App 运行时才跑，不设 LaunchAgent/外部调度器。
     const stopAutoRefresh = startAutoRefresh(scout, { enabled: config.autoRefresh ?? true, hours: config.autoRefreshHours ?? 1 });
     return async () => {

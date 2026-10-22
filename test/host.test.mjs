@@ -317,23 +317,29 @@ test('handler: list / detail / badges / refresh / 404', async () => {
   assert.equal((await call(h, { url: `${PREFIX}/api/zzz` })).status, 404);
 });
 
-test('apply: registers one prefix route through ctx.effect and tears it down', async () => {
+async function fetchRoute(route) {
+  const response = await route.fetch(new Request(`http://localhost${route.path}`, { headers: { 'x-dsh-plugin-scout': '1' } }));
+  return { status: response.status, body: await response.json() };
+}
+
+test('apply: registers six shared exact routes through connection and tears them down', async () => {
   const dir = await tmp();
   try {
     const routes = [];
     let teardown;
     const ctx = {
-      webServer: { register(r) { routes.push(r); return () => routes.splice(routes.indexOf(r), 1); } },
+      connection: { fetch: { register(r) { routes.push(r); return () => routes.splice(routes.indexOf(r), 1); } } },
       subprocess: { spawn() { throw new Error('not in test'); } },
       effect(fn) { teardown = fn(); },
       get: () => ({ admit: () => ({ peer: {} }) }),
       logger: { info() {}, warn() {} },
     };
     await apply(ctx, { dataDir: dir, runtimeVersion: '0.2.0-rc.2', autoRefreshHours: 0 });
-    assert.equal(routes.length, 1);
-    assert.equal(routes[0].kind, 'prefix');
-    assert.equal(routes[0].path, PREFIX);
-    const s = await call(routes[0].handler, { url: `${PREFIX}/api/status` });
+    assert.equal(routes.length, 6);
+    assert.deepEqual(routes[0].methods, ['GET']);
+    assert.equal(routes[0].requestBody, 'streaming');
+    assert.equal(routes[0].path, `${PREFIX}/api/status`);
+    const s = await fetchRoute(routes[0]);
     assert.equal(s.body.value.runtimeSource, 'config');
     await teardown();
     assert.equal(routes.length, 0);
@@ -437,17 +443,17 @@ test('apply does not wait for the index: status answers loaded:false first, then
     const routes = [];
     let teardown;
     const ctx = {
-      webServer: { register(r) { routes.push(r); return () => {}; } },
+      connection: { fetch: { register(r) { routes.push(r); return () => {}; } } },
       subprocess: { spawn() { throw new Error('not in test'); } },
       effect(fn) { teardown = fn(); },
       get: () => ({ admit: () => ({ peer: {} }) }),
       logger: { info() {}, warn() {} },
     };
     await apply(ctx, { dataDir: dir, runtimeVersion: '0.2.0-rc.2', autoRefreshHours: 0 });
-    const first = await call(routes[0].handler, { url: `${PREFIX}/api/status` });
+    const first = await fetchRoute(routes[0]);
     assert.equal(typeof first.body.value.loaded, 'boolean');
-    for (let i = 0; i < 100; i++) { if ((await call(routes[0].handler, { url: `${PREFIX}/api/status` })).body.value.loaded) break; await new Promise((r) => setTimeout(r, 5)); }
-    assert.equal((await call(routes[0].handler, { url: `${PREFIX}/api/status` })).body.value.loaded, true);
+    for (let i = 0; i < 100; i++) { if ((await fetchRoute(routes[0])).body.value.loaded) break; await new Promise((r) => setTimeout(r, 5)); }
+    assert.equal((await fetchRoute(routes[0])).body.value.loaded, true);
     await teardown();
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

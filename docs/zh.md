@@ -132,7 +132,7 @@ Host 通过官方 DSH credentials 服务将 Token 保存到固定引用 `DSH_SCO
 
 ## 安全边界
 
-- 接口挂在 DSH 自己的 webServer 上（`/dsh-plugin-scout/api/*`）。每个请求都要带自定义头 `x-dsh-plugin-scout: 1`，并通过 DSH `connection.admit`（Host/Origin 栅栏 + 浏览器认证）。拿不到 `connection` 服务时拒绝请求（fail closed）。
+- 接口通过官方 `connection.fetch` 注册为 `/api/dsh-plugin-scout/api/*` 精确路由，桌面与 Web 共用。宿主通道先认证并拒绝非 owner 调用，再交给 Scout；Scout 额外要求 `x-dsh-plugin-scout: 1`。不另起回环服务器，不复制认证 Token；必须具备 `connection` 服务。
 - `cordis.patch.yml` 只用正则提取 `name:`，从不解析 YAML 标签。抓取到的代码不执行，也不下载 tarball。
 - 样式标签在插入 DOM 之前就打上 `data-plugin` / `data-plugin-css`。只使用 `--dsw-alias-*` 令牌；类名避开宿主皮肤会匹配的子串；抽屉不用 `role="dialog"`。
 
