@@ -109,7 +109,15 @@ npm test          # builds lib/, then runs the core / host / client / manifest s
 
 Local debugging: add this directory's absolute path on the Plugins page (a link install; do not move the directory). Host changes need a full App restart; client-only changes need a window reload.
 
-**GitHub token**, in order: `DSH_SCOUT_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`, or `gh auth token` run through the DSH subprocess service. The token stays in process memory: never written to disk, never sent to the browser. Without one, the page asks you to run `gh auth login`.
+## GitHub setup
+
+Open **Scout → GitHub settings**. First use without a credential shows setup automatically; an existing index remains browsable. Enter a GitHub personal access token, click **Save**, then **Check connection** and **Refresh index**. The check is a read-only GraphQL request, not a crawl. Use a token that can read public repository metadata through GitHub GraphQL; do not grant private-repository or write access solely for Scout. Invalid/expired credentials, permission denial, rate limits and network failures are reported without upstream response bodies.
+
+The Host saves the Token through the official DSH credentials service under the fixed reference `DSH_SCOUT_GITHUB_TOKEN`, not ordinary plugin configuration or the index. **The local provider stores plaintext in an owner-permission credential file; it is not encryption or Keychain.** Token input is transient, cleared after save and never put in browser storage. Saved Tokens are never returned by the API. **Clear saved Token** removes this reference's stored value only; environment or CLI fallbacks may still provide a credential. Older hosts without the credentials service cannot save Tokens and should use CLI/environment setup.
+
+Alternatively install [GitHub CLI](https://cli.github.com/), manually run `gh auth login --hostname github.com` on the same machine/account running DSH, then return to **Check connection**. Scout does not launch login or open authentication pages automatically. The existing CLI lookup checks common Homebrew/system paths; a nonstandard installation may require environment setup instead.
+
+Credential order: DSH credentials for `DSH_SCOUT_GITHUB_TOKEN` (stored value before that reference's ambient fallbacks), process environment `DSH_SCOUT_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`, then `gh auth token` via DSH subprocess. Environment variables must be present **when DSH starts**: exporting one in a later terminal does not update the running desktop App. Changes saved through DSH credentials take effect on the next operation without restarting.
 
 ## Data and configuration
 

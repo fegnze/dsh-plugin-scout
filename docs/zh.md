@@ -110,7 +110,15 @@ npm test          # 先构建 lib/，再跑 core / host / client / manifest 四�
 
 本地调试：在插件页添加本目录的绝对路径（link 安装，源目录不能移动）。Host 侧有改动时需要完整重启 App；只改了 Client 时刷新窗口即可。
 
-**GitHub token** 依次从这些地方取：环境变量 `DSH_SCOUT_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`，或通过 DSH subprocess 服务执行 `gh auth token`。token 只在本进程内存里使用，不落盘、不回传给前端。没有 token 时页面会提示执行 `gh auth login`。
+## GitHub 认证设置
+
+打开 **Scout → GitHub 设置**。首次使用且未配置凭证时自动展示设置，已有索引仍可浏览。输入 GitHub Personal Access Token，点击 **保存**，再 **检测连接**、**刷新索引**。检测仅执行只读 GraphQL 请求，不启动抓取。Token 需能通过 GitHub GraphQL 读取公开仓库元数据；不要仅为 Scout 授予私有仓库或写入权限。失效/过期、权限拒绝、限流及网络故障分别反馈，不展示上游原始响应。
+
+Host 通过官方 DSH credentials 服务将 Token 保存到固定引用 `DSH_SCOUT_GITHUB_TOKEN`，不混入普通插件配置或索引。**本地 provider 使用仅当前用户可读的明文凭证文件，不是加密存储或系统钥匙串。** 输入框草稿仅临时保留，保存后清空，不使用浏览器持久化；API 不返回已保存 Token。**清除已存 Token** 只删除该引用的存储值，环境变量或 CLI 仍可能提供有效凭证。不支持凭证服务的旧宿主无法保存 Token，可使用 CLI 或环境变量。
+
+另一种方式是安装 [GitHub CLI](https://cli.github.com/)，在运行 DSH 的同一台机器、同一用户下手动执行 `gh auth login --hostname github.com`，然后返回 **检测连接**。Scout 不自动启动登录或打开认证页面。CLI 探测沿用常见 Homebrew/系统安装路径；非标准安装可改用环境变量。
+
+凭证优先级：DSH credentials 中的 `DSH_SCOUT_GITHUB_TOKEN`（已存值优先于该引用的环境回退）→ 进程环境 `DSH_SCOUT_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` → 经 DSH subprocess 执行 `gh auth token`。环境变量必须在 **DSH 启动时** 已存在；之后在新终端 export 不会更新已运行的桌面 App。通过 DSH 凭证服务保存的修改在下一次操作生效，无需重启。
 
 ## 数据与配置
 

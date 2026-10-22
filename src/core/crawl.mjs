@@ -92,10 +92,10 @@ export function createGithub({ token, fetch = globalThis.fetch, signal, onCost }
     signal?.throwIfAborted();
     if (Date.now() < retryAt) throw Object.assign(new Error('GitHub rate limit; refresh deferred'), { code: 'rate-limit', retryAt });
     const res = await fetch(GQL, {
-      method: 'POST', signal,
+      method: 'POST', signal, redirect: 'error',
       headers: { authorization: `bearer ${token}`, 'content-type': 'application/json', 'user-agent': 'dsh-plugin-scout' },
       body: JSON.stringify({ query, variables }),
-    });
+    }).catch(() => { throw Object.assign(new Error('GitHub 连接失败，请检查网络后重试'), { code: 'network' }); });
     if (res.status === 401) throw Object.assign(new Error('GitHub token 无效或已过期'), { code: 'auth' });
     if (res.status === 403 || res.status === 429) {
       const raw = res.headers.get('retry-after');
@@ -117,7 +117,7 @@ export function createGithub({ token, fetch = globalThis.fetch, signal, onCost }
       retryAt = Math.max(Date.parse(body.data?.rateLimit?.resetAt) || 0, Date.now() + 60_000);
       throw Object.assign(new Error('GitHub rate limit; refresh deferred'), { code: 'rate-limit', retryAt });
     }
-    if (body.errors?.length && (!body.data || query === BY_REPO)) throw Object.assign(new Error(body.errors[0].message), { code: 'graphql' });
+    if (body.errors?.length && (!body.data || query === BY_REPO)) throw Object.assign(new Error('GitHub GraphQL 查询失败，请检查认证权限后重试'), { code: 'graphql' });
     if (body.data?.rateLimit) onCost?.(body.data.rateLimit);
     return body.data;
   }

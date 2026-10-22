@@ -32,6 +32,11 @@ export function ScoutPage({ face }) {
   const resetScroll = useRef(false);
   const pageRef = useRef(null);
   const [pageHeight, setPageHeight] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [token, setToken] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMessage, setAuthMessage] = useState(null);
 
   // Measure only our own seat; never query or restyle the official page's DOM.
   useLayoutEffect(() => {
@@ -61,6 +66,19 @@ export function ScoutPage({ face }) {
     try { setStatus(await api.status()); setError(null); } catch (e) { setError(e.message); }
   }, []);
   useEffect(() => { void loadStatus(); }, [loadStatus]);
+  const loadAuth = useCallback(async () => {
+    try { const value = await api.auth(); setAuth(value); if (!value.configured) setAuthOpen(true); } catch (e) { setAuthMessage(e.message); }
+  }, []);
+  useEffect(() => { void loadAuth(); }, [loadAuth]);
+  const authAction = async (action) => {
+    setAuthBusy(true); setAuthMessage(null);
+    try {
+      const value = await api.auth(action, action === 'save' ? token : undefined);
+      setAuth(value); setToken('');
+      setAuthMessage(action === 'save' ? '已保存 GitHub 凭证。' : action === 'clear' ? '已清除保存的凭证，将使用环境或 gh。' : value.check?.message ?? (value.check?.ok ? '连接成功。' : '连接失败。'));
+    } catch (e) { setAuthMessage(e.message); }
+    finally { setAuthBusy(false); }
+  };
   // Idle polling discovers host-initiated refreshes; active work gets faster progress updates.
   const busy = !!status && (status.running || !status.loaded);
   useEffect(() => {
@@ -123,6 +141,7 @@ export function ScoutPage({ face }) {
         <div className="scx-fresh">
           <span title={status?.runtimeSource}>运行时 {status?.runtime ?? '…'}</span>
           <span>{status?.running ? progressText(status.progress) : status && !status.loaded ? '读取索引…' : `更新于 ${ago(status?.crawledAt)}`}</span>
+          <button type="button" className="scx-btn" onClick={() => { setAuthOpen((v) => !v); if (!auth) void loadAuth(); }}>GitHub 设置</button>
           <button type="button" className="scx-btn" disabled={!status || status.running} onClick={() => refresh(false)}>{status?.running ? '刷新中…' : '刷新'}</button>
         </div>
       </div>
@@ -154,6 +173,17 @@ export function ScoutPage({ face }) {
           </div>
         </div>
         <div className="scx-list">
+          {authOpen ? <section className="scx-auth" aria-label="GitHub 设置">
+            <div className="scx-auth-head"><b>GitHub 设置</b><button type="button" className="scx-btn" onClick={() => setAuthOpen(false)}>收起</button></div>
+            {auth?.configured ? <div className="scx-auth-status">当前来源：{auth.source || '未知'}{auth.stored ? '（已保存）' : ''}</div> : <div className="scx-auth-status">尚未配置 GitHub 凭证。</div>}
+            <label className="scx-auth-token">GitHub Token<input type="password" value={token} disabled={!auth?.writable || authBusy} autoComplete="off" onChange={(e) => setToken(e.target.value)} placeholder="ghp_…" /></label>
+            <div className="scx-auth-actions"><button type="button" className="scx-btn" data-tone="pri" disabled={authBusy || !auth?.writable || !token.trim()} onClick={() => authAction('save')}>保存 Token</button><button type="button" className="scx-btn" disabled={authBusy} onClick={() => authAction('check')}>连接检测</button><button type="button" className="scx-btn" data-tone="bad" disabled={authBusy || !auth?.stored} onClick={() => authAction('clear')}>清除</button></div>
+            {auth && !auth.writable ? <p className="scx-auth-help">当前宿主不支持保存 Token，请使用 gh 登录或在 DSH 启动前设置 GITHUB_TOKEN。</p> : null}
+            <p className="scx-auth-help">Token 只需 GitHub GraphQL 公开仓库读取权限，不推荐 repo 宽权限。保存到本地 DSH 凭证服务的文件仅当前用户可读，但为明文文件，不是加密存储。也可手动执行 <code>gh auth login --hostname github.com</code> 后重新检测；未安装 gh 请访问 <a href="https://cli.github.com/" target="_blank" rel="noreferrer">cli.github.com</a>。不会自动认证。</p>
+            <p className="scx-auth-help"><a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer">GitHub Token 设置</a>（不会自动打开）。</p>
+            {authMessage ? <div className="scx-note" data-tone={auth?.check?.ok ? undefined : 'bad'}>{authMessage}</div> : null}
+            {auth?.check?.ok ? <button type="button" className="scx-btn" disabled={!status || status.running} onClick={() => refresh(false)}>刷新索引</button> : null}
+          </section> : null}
           {error ? <div className="scx-note" data-tone="bad">{error}</div> : null}
           {status?.error ? <div className="scx-note" data-tone="bad">上次刷新失败：{status.error.message}</div> : null}
           {empty ? <div className="scx-note">还没有索引。抓取边进行边出结果——最近活跃的插件几秒内就会出现，其余在后台补齐，期间可正常使用 DSH。<button type="button" className="scx-btn" style={{ marginLeft: 8 }} onClick={() => refresh(true)}>开始抓取</button></div> : null}

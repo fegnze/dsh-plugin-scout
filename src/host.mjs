@@ -1,6 +1,7 @@
 // DSH Plugin Scout — Host 半边。
-// 职责：抓 GitHub topic:dsh-plugin + npm，存事实索引，按需现算核验，经 DSH 自己的 webServer 同源提供只读接口。
+// 职责：抓 GitHub topic:dsh-plugin + npm，存事实索引，按需核验；经 DSH webServer 提供查询和凭证设置接口。
 // 边界：不安装、不卸载、不启用任何插件（那是官方插件页的事）；不起常驻进程，子进程只用于 `gh auth token`，走 subprocess 服务。
+import { createAuth } from './auth.mjs';
 import { homedir } from 'node:os';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -161,9 +162,9 @@ export function createScout({ file, topic = 'dsh-plugin', getToken, runtime, fet
     const { signal } = controller;
     await load().catch(() => {});
     signal.throwIfAborted();
-    const { token, source } = await getToken();
+    const { token, source } = await getToken().catch(() => { throw Object.assign(new Error('GitHub 凭证服务不可用，请打开 GitHub 设置检查'), { code: 'credentials' }); });
     signal.throwIfAborted();
-    if (!token) throw Object.assign(new Error('没有 GitHub token：请先在终端执行 `gh auth login`，或设置 GITHUB_TOKEN'), { code: 'no-token' });
+    if (!token) throw Object.assign(new Error('尚未配置 GitHub 认证，请打开 GitHub 设置保存 Token 或查看 gh 登录指引'), { code: 'no-token' });
     const gh = createGithub({ token, fetch, signal, onCost: (c) => { state.cost = c; } });
     const t0 = now();
     // 增量：自上次抓取前 1 天起推送过的仓库（推送会刷新 package.json，所以 pushed 比 created 更合适）。
@@ -389,13 +390,27 @@ async function readJson(req, limit = 256_000) {
 const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 500) : typeof v === 'string' && v ? v.split(',').slice(0, 50) : []);
 
 /** 路由。所有接口都要求自定义头（CSRF 意图）+ DSH connection.admit（Host/Origin 栅栏 + 浏览器认证）。 */
-export function createHandler(scout, { admit }) {
+export function createHandler(scout, { admit, auth }) {
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const path = url.pathname.slice(PREFIX.length) || '/';
     if (req.headers['x-dsh-plugin-scout'] !== '1') return send(res, 403, { ok: false, error: { code: 'forbidden', message: 'missing intent header' } });
     const admission = admit(req);
     if (!admission || admission.rejection !== undefined || !admission.peer) return send(res, admission?.rejection ?? 403, { ok: false, error: { code: 'forbidden', message: 'DSH 认证失败，请重新打开应用' } });
+    if (path === '/api/auth') {
+      if (admission.peer.principal?.kind !== 'owner') return send(res, 403, { ok: false, error: { code: 'forbidden', message: '仅主人可管理 GitHub 认证' } });
+      try {
+        if (!auth) return send(res, 503, { ok: false, error: { code: 'unavailable', message: 'GitHub 设置尚未就绪，请重启 DSH' } });
+        if (req.method === 'GET') return send(res, 200, { ok: true, value: await auth.run() });
+        if (req.method !== 'POST') return send(res, 405, { ok: false, error: { code: 'method', message: '不支持的请求' } });
+        let b;
+        try { b = await readJson(req, 8192); } catch (e) { return send(res, e.status === 413 ? 413 : 400, { ok: false, error: { code: 'bad-request', message: '认证请求格式错误或过大' } }); }
+        if (!b || typeof b !== 'object' || Array.isArray(b) || !['save', 'clear', 'check'].includes(b.action)) return send(res, 400, { ok: false, error: { code: 'bad-request', message: '不支持的认证操作' } });
+        return send(res, 200, { ok: true, value: await auth.run(b.action, b.token) });
+      } catch (e) {
+        return send(res, [400, 409, 503].includes(e.status) ? e.status : 503, { ok: false, error: { code: 'auth-error', message: 'GitHub 设置操作失败，请检查 Token 或凭证服务后重试' } });
+      }
+    }
     try {
       if (req.method === 'GET' && path === '/api/status') return send(res, 200, { ok: true, value: scout.status() });
       if (req.method === 'POST' && path === '/api/list') {
@@ -428,7 +443,8 @@ export async function apply(ctx, config = {}) {
   const dataDir = config.dataDir || join(homedir(), '.dsh', 'dsh-plugin-scout');
   const runtime = await resolveRuntime(config);
   const log = (m) => ctx.logger?.info?.(m) ?? ctx.logger?.warn?.(m);
-  const scout = createScout({ file: join(dataDir, 'index.json'), topic: config.topic, runtime, getToken: () => resolveToken(ctx.subprocess), log });
+  const auth = createAuth({ credentials: ctx.get?.('credentials') ?? ctx.credentials, fallback: () => resolveToken(ctx.subprocess) });
+  const scout = createScout({ file: join(dataDir, 'index.json'), topic: config.topic, runtime, getToken: () => auth.resolve(), log });
   // 不在激活路径上读 30MB 索引：后台加载，界面先拿到 loaded:false 再自行轮询。
   scout.load().catch((e) => ctx.logger?.warn?.(`[scout] index unreadable, starting empty: ${e.message}`));
   const admit = (req) => {
@@ -436,7 +452,7 @@ export async function apply(ctx, config = {}) {
     return typeof connection?.admit === 'function' ? connection.admit(req) : undefined;
   };
   ctx.effect(() => {
-    const dispose = ctx.webServer.register({ kind: 'prefix', path: PREFIX, handler: createHandler(scout, { admit }) });
+    const dispose = ctx.webServer.register({ kind: 'prefix', path: PREFIX, handler: createHandler(scout, { admit, auth }) });
     // 进程内定时：App 运行时才跑，不设 LaunchAgent/外部调度器。
     const stopAutoRefresh = startAutoRefresh(scout, { enabled: config.autoRefresh ?? true, hours: config.autoRefreshHours ?? 1 });
     return async () => {

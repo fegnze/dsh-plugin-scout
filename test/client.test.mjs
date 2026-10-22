@@ -33,6 +33,7 @@ globalThis.fetch = async (url, init = {}) => {
   assert.equal(init.headers['x-dsh-plugin-scout'], '1', 'intent header on every call');
   assert.equal(init.credentials, 'same-origin');
   const u = new URL(url, 'http://localhost');
+  if (u.pathname === '/dsh-plugin-scout/api/auth') return ok({ configured: true, source: 'test', writable: true, stored: false, storage: 'credentials' });
   if (u.pathname === '/dsh-plugin-scout/api/status') return ok({ running: false, crawledAt: '2026-10-13T00:00:00Z', fullAt: '2026-10-13T00:00:00Z', runtime: '0.2.0-rc.2', runtimeSource: 'test', repos: 19000, error: null, categories: { memory: '记忆', ui: '界面' }, facets: { compat: { ok: 2 }, flags: {}, copies: 0 } });
   if (u.pathname === '/dsh-plugin-scout/api/list') return ok({ total: ROWS.length, cats: { all: 2, memory: 2 }, rows: ROWS });
   if (u.pathname === '/dsh-plugin-scout/api/detail') {
@@ -71,6 +72,34 @@ async function render(element) {
 }
 const flush = (ms = 60) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
 const find = (c, sel, re) => [...c.querySelectorAll(sel)].find((el) => re.test(el.textContent));
+
+test('GitHub setup opens on first use, saves transient password, checks and clears with fallback', async () => {
+  const baseFetch = globalThis.fetch;
+  let saved = false; const actions = [];
+  globalThis.fetch = async (url, init = {}) => {
+    if (!String(url).endsWith('/api/auth')) return baseFetch(url, init);
+    const body = init.body ? JSON.parse(init.body) : {};
+    if (body.action) actions.push(body);
+    if (body.action === 'save') saved = true;
+    if (body.action === 'clear') saved = false;
+    return { status: 200, json: async () => ({ ok: true, value: { configured: saved || body.action === 'clear', source: saved ? 'DSH credentials' : body.action === 'clear' ? 'GITHUB_TOKEN' : 'none', stored: saved, writable: true, storage: 'credentials', ...(body.action === 'check' ? { check: { ok: true, message: 'GitHub 连接成功' } } : {}) } }) };
+  };
+  const ctx = mockContext(); client.apply(ctx); let v;
+  try {
+    const Page = ctx.registrations.find((r) => r.options.name === 'plugins.tab').component;
+    v = await render(React.createElement(Page)); await flush();
+    assert.ok(v.container.querySelector('.scx-auth')); assert.match(v.container.textContent, /明文文件/); assert.match(v.container.textContent, /gh auth login --hostname github.com/);
+    const password = v.container.querySelector('input[type="password"]');
+    await act(async () => { Simulate.change(password, { target: { value: 'ghp_CLIENT_TEST_1234567890' } }); });
+    await act(async () => find(v.container, 'button', /^保存 Token$/).click()); await flush();
+    assert.equal(password.value, ''); assert.equal(actions[0].token, 'ghp_CLIENT_TEST_1234567890');
+    await act(async () => find(v.container, 'button', /^连接检测$/).click()); await flush();
+    assert.ok(find(v.container, 'button', /^刷新索引$/));
+    await act(async () => find(v.container, 'button', /^清除$/).click()); await flush();
+    assert.match(v.container.textContent, /GITHUB_TOKEN/); assert.deepEqual(actions.map((x) => x.action), ['save', 'check', 'clear']);
+    assert.equal(browser.localStorage.length, 0);
+  } finally { if (v) await v.close(); ctx.dispose(); globalThis.fetch = baseFetch; }
+});
 
 test('registers exactly the public seams: Scout tab, official badge + section, no sidebar or main panel', () => {
   const ctx = mockContext();

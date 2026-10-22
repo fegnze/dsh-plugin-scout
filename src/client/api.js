@@ -24,6 +24,10 @@ export const api = {
   detail: (key) => call(`/api/detail?key=${encodeURIComponent(key)}`),
   badges: (names) => call('/api/badges', { method: 'POST', body: JSON.stringify({ names }) }),
   refresh: (full) => call('/api/refresh', { method: 'POST', body: JSON.stringify({ full: !!full }) }),
+  auth: (action, token) => call(action ? '/api/auth' : '/api/auth', {
+    method: action ? 'POST' : 'GET',
+    ...(action ? { body: JSON.stringify({ action, ...(token === undefined ? {} : { token }) }) } : {}),
+  }),
 };
 
 /** 合并同一帧内的徽章查询（官方插件页会一次渲染很多条）。 */
