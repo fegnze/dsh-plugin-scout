@@ -9,7 +9,7 @@ async function call(path, init = {}) {
   });
   let body;
   try { body = await res.json(); } catch { body = undefined; }
-  if (!body || body.ok === false) {
+  if (res.status < 200 || res.status >= 300 || !body || body.ok !== true || !Object.hasOwn(body, 'value')) {
     const err = new Error(body?.error?.message ?? `HTTP ${res.status}`);
     err.code = body?.error?.code ?? 'http';
     err.value = body?.value;

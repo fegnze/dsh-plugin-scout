@@ -445,7 +445,7 @@ export function registerScoutRoutes(connection, scout, auth) {
   const handler = createHandler(scout, { auth, admit: () => ({ peer: { principal: { kind: 'owner' } } }) });
   const endpoints = { status: ['GET'], list: ['POST'], detail: ['GET'], badges: ['POST'], refresh: ['POST'], auth: ['GET', 'POST'] };
   const disposers = Object.entries(endpoints).map(([endpoint, methods]) => connection.fetch.register({
-    path: `${PREFIX}/api/${endpoint}`, methods, requestBody: 'streaming',
+    path: `${PREFIX}/api/${endpoint}`, methods, requestBody: methods.includes('GET') ? 'buffered' : 'streaming',
     async fetch(request) {
       const req = request.body ? Readable.fromWeb(request.body) : Readable.from([]);
       req.method = request.method;

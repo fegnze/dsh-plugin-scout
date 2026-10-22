@@ -12,6 +12,7 @@ const PAGE = 60;
 
 export function ScoutPage({ face }) {
   const [status, setStatus] = useState(null);
+  const [statusError, setStatusError] = useState(null);
   const [error, setError] = useState(null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('all');
@@ -63,7 +64,7 @@ export function ScoutPage({ face }) {
   const say = useCallback((text) => { setToast(text); clearTimeout(say.h); say.h = setTimeout(() => setToast(null), 2200); }, []);
 
   const loadStatus = useCallback(async () => {
-    try { setStatus(await api.status()); setError(null); } catch (e) { setError(e.message); }
+    try { setStatus(await api.status()); setStatusError(null); } catch (e) { setStatusError(e.message); }
   }, []);
   useEffect(() => { void loadStatus(); }, [loadStatus]);
   const loadAuth = useCallback(async () => {
@@ -184,6 +185,7 @@ export function ScoutPage({ face }) {
             {authMessage ? <div className="scx-note" data-tone={auth?.check?.ok ? undefined : 'bad'}>{authMessage}</div> : null}
             {auth?.check?.ok ? <button type="button" className="scx-btn" disabled={!status || status.running} onClick={() => refresh(false)}>刷新索引</button> : null}
           </section> : null}
+          {statusError ? <div className="scx-note" data-tone="bad">状态加载失败：{statusError}<button type="button" className="scx-btn" onClick={loadStatus}>重试</button></div> : null}
           {error ? <div className="scx-note" data-tone="bad">{error}</div> : null}
           {status?.error ? <div className="scx-note" data-tone="bad">上次刷新失败：{status.error.message}</div> : null}
           {empty ? <div className="scx-note">还没有索引。抓取边进行边出结果——最近活跃的插件几秒内就会出现，其余在后台补齐，期间可正常使用 DSH。<button type="button" className="scx-btn" style={{ marginLeft: 8 }} onClick={() => refresh(true)}>开始抓取</button></div> : null}

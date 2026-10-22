@@ -337,7 +337,7 @@ test('apply: registers six shared exact routes through connection and tears them
     await apply(ctx, { dataDir: dir, runtimeVersion: '0.2.0-rc.2', autoRefreshHours: 0 });
     assert.equal(routes.length, 6);
     assert.deepEqual(routes[0].methods, ['GET']);
-    assert.equal(routes[0].requestBody, 'streaming');
+    assert.equal(routes[0].requestBody, 'buffered');
     assert.equal(routes[0].path, `${PREFIX}/api/status`);
     const s = await fetchRoute(routes[0]);
     assert.equal(s.body.value.runtimeSource, 'config');

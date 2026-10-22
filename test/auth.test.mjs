@@ -7,7 +7,9 @@ test('shared carrier adapter preserves intent fence and streaming credential lim
   const routes = new Map(); const { auth } = setup();
   const dispose = registerScoutRoutes({ fetch: { register(route) { assert.ok(route.path.startsWith('/api/')); routes.set(route.path, route); return () => routes.delete(route.path); } } }, { status: () => ({ loaded: true }) }, auth);
   const route = routes.get(`${PREFIX}/api/auth`);
-  assert.equal(route.requestBody, 'streaming');
+  assert.equal(route.requestBody, 'buffered');
+  assert.equal(routes.get(`${PREFIX}/api/status`).requestBody, 'buffered');
+  assert.equal(routes.get(`${PREFIX}/api/list`).requestBody, 'streaming');
   const call = (body, intent = true) => route.fetch(new Request(`http://desktop${route.path}`, { method: 'POST', headers: intent ? { 'x-dsh-plugin-scout': '1' } : {}, body }));
   assert.equal((await call(JSON.stringify({ action: 'save', token: secret }), false)).status, 403);
   assert.equal((await call('x'.repeat(9000))).status, 413);
